@@ -18,8 +18,24 @@ function snow(count) {
     const dur = 26 - depth * 18 + rnd() * 5;    // ungefär 8 till 31 sekunder
     html += `<span style="left:${(rnd() * 100).toFixed(1)}%;width:${size.toFixed(1)}px;height:${size.toFixed(1)}px;opacity:${(0.14 + depth * 0.26).toFixed(2)};animation-duration:${dur.toFixed(1)}s;animation-delay:-${(rnd() * dur).toFixed(1)}s"></span>`;
   }
-  el.innerHTML = html;
+  el.innerHTML = html + SLEIGH;
 }
+
+const SLEIGH = `<svg class="sleigh" viewBox="0 0 230 74" aria-hidden="true" fill="#FFF9EF" stroke="#FFF9EF" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 64 H74 Q88 64 88 50" fill="none" stroke-width="3.5"/>
+  <path d="M24 64 V54 M62 64 V54" fill="none" stroke-width="3"/>
+  <path d="M10 54 Q6 32 22 30 L26 42 H58 L66 26 Q80 30 76 54 Z" stroke-width="2"/>
+  <circle cx="22" cy="25" r="11" stroke="none"/>
+  <path d="M36 40 V26 Q36 18 44 18 Q52 18 52 26 V40 Z" stroke="none"/>
+  <circle cx="44" cy="13" r="6.5" stroke="none"/>
+  <path d="M38 10 Q44 -2 56 6 L50 11 Z" fill="#FFC94A" stroke="#FFC94A" stroke-width="1"/>
+  <path d="M74 38 L150 36 M74 42 L150 40" fill="none" stroke-width="1.4"/>
+  <ellipse cx="172" cy="40" rx="24" ry="9.5" stroke="none"/>
+  <path d="M188 38 L200 18 L214 20 L211 27 L200 30 L196 44 Z" stroke-width="2"/>
+  <path d="M202 18 L200 6 M201 12 L195 7 M201 11 L207 5 M208 19 L210 9 M209 14 L214 10" fill="none" stroke-width="2"/>
+  <path d="M188 46 L200 62 M182 47 L178 66 M158 46 L146 60 M163 47 L168 66 M149 38 L143 34" fill="none" stroke-width="3.5"/>
+  <circle cx="215" cy="22" r="3" fill="#FFC94A" stroke="none"/>
+</svg>`;
 
 // Ritar bara om när något faktiskt ändrats, och spelar in-animationer bara när skärmen byts.
 function makeRenderer(root) {

@@ -287,6 +287,7 @@ function draw() {
   const [key, html] = screen();
   const extra = (online || !session ? '' : `<div class="offline" role="status">Återansluter</div>`)
     + (toast ? `<div class="toast" role="alert">${esc(toast)}</div>` : '');
+  document.body.classList.toggle('drift', /^(home|connecting|spectator|wait|jurywait)/.test(key));
   render(key, html + extra);
 }
 

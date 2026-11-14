@@ -266,4 +266,53 @@ h1 { font-size: clamp(27px, 5dvh, 36px); }
 .tv .word { font-family: var(--display); font-weight: 700; color: var(--yellow); }
 .tv .form { max-width: 36vw; margin: auto; display: flex; flex-direction: column; gap: 2vh; align-items: stretch; text-align: center; font-size: 17px; }
 
+/* ---------- Jultema: sätts med klassen "jul" på body, ta bort klassen för grundutseendet ---------- */
+.jul {
+  --ground: #9E1B26; --panel: #7B1019; --cream: #FFF9EF; --muted: #F6D3CD;
+  --ink: #3A0A10; --ink-soft: #7A4A4A; --red: #C02330; --green: #1F6B4A;
+}
+.jul .tile { background: var(--cream); color: var(--ground); }
+.jul .tile:nth-child(even) { background: var(--green); color: var(--cream); }
+.jul .tag .front { background: var(--green); }
+.jul .hang .string { background: repeating-linear-gradient(180deg, #fff 0 6px, #D4202E 6px 12px); width: 5px; }
+.jul .hang .knob { background: var(--cream); }
+.jul .pill.on, .jul .vote.on { border-color: var(--green); }
+.jul .dots span:nth-child(3) { background: var(--green); }
+.jul .toast { background: var(--cream); color: var(--red); }
+.jul .logo em, .jul .stamp { text-shadow: 0 -3px 0 #fff; }
+.jul .slip.truth { background: var(--green); }
+.jul .slip.truth span { color: #CDE7DA; }
+.jul .tv .person .st { background: var(--panel); }
+.jul .tv .person.done .st { background: var(--yellow); }
+
+/* Snö som ligger ovanpå knappar och rutor */
+.jul .btn:not(.ghost):not([disabled]), .jul .tile, .jul .panel, .jul .slip, .jul .peek, .jul .boardbox, .jul .qr { position: relative; }
+.jul .foot .btn:not(.ghost):not([disabled]), .jul .screen > .btn:not(.ghost)::before { position: relative; }
+.jul .btn:not(.ghost):not([disabled])::before, .jul .tile::before, .jul .panel::before, .jul .slip::before, .jul .peek::before, .jul .boardbox::before, .jul .qr::before {
+  content: ""; position: absolute; left: 9px; right: 9px; top: -5px; height: 13px; pointer-events: none;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 60 13'%3E%3Cpath d='M0 3 Q0 0 4 0 H56 Q60 0 60 3 V5 Q57 9 53 6 Q49 3 45 8 Q41 13 36 8 Q32 4 27 7 Q22 11 18 7 Q14 3 9 7 Q5 11 2 7 Q0 5 0 5 Z' fill='%23fff'/%3E%3C/svg%3E") repeat-x; background-size: 60px 13px;
+}
+.jul .tile::before { left: 4px; right: 4px; top: -4px; height: 9px; background-size: 40px 9px; }
+.jul.tv .tile::before, .jul.tv .boardbox::before, .jul.tv .qr::before, .jul.tv .slip::before { left: 1vw; right: 1vw; top: -.5vw; height: 1.5vw; background-size: 7vw 1.5vw; }
+
+/* Tomteluva på alla spelare */
+.jul .dot { position: relative; }
+.jul .dot::before {
+  content: ""; position: absolute; width: 82%; aspect-ratio: 68 / 54; left: -10%; top: -36%; transform: rotate(-16deg);
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 68 54'%3E%3Cpath d='M10 41 C10 20 24 5 42 6 C53 7 60 14 61 25 C55 18 48 18 46 24 C44 31 47 37 49 41 Z' fill='%23D4202E' stroke='%23fff' stroke-width='3' stroke-linejoin='round'/%3E%3Crect x='3' y='36' width='52' height='14' rx='7' fill='%23fff'/%3E%3Ccircle cx='60' cy='28' r='7' fill='%23fff'/%3E%3C/svg%3E") center / contain no-repeat; pointer-events: none;
+}
+
+/* Släden som far förbi, och snödrivan längst ner */
+@keyframes sleigh { 0% { transform: translate(-130%, 30px) rotate(-7deg) } 24% { transform: translate(calc(100vw + 30%), -40px) rotate(-7deg) } 100% { transform: translate(calc(100vw + 30%), -40px) rotate(-7deg) } }
+.sleigh { display: none; }
+.jul .sleigh { display: block; position: absolute; top: 11%; left: 0; width: clamp(130px, 36vw, 230px); opacity: .85; animation: sleigh 30s linear 3s infinite both; }
+.jul.tv .sleigh { width: 17vw; top: 8%; }
+.jul:not(.tv):not(.drift) .sleigh { display: none; } /* på mobilen bara där den inte stör läsningen */
+.jul .avatar { --s: clamp(76px, 17dvh, 140px); margin-top: calc(var(--s) * .2); }
+.jul.tv .avatar { --s: 15vw; margin-top: 3vw; }
+.jul .tag .front .note { color: var(--cream); }
+.jul.drift .snow::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: clamp(52px, 9vh, 80px); background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 60' preserveAspectRatio='none'%3E%3Cpath d='M0 60 V30 Q50 5 110 22 T220 20 T330 16 T400 26 V60 Z' fill='%23FFF9EF'/%3E%3C/svg%3E") bottom / 100% 100% no-repeat; }
+.jul.drift .tvlink { color: var(--ink); font-weight: 800; }
+.jul.drift .tvlink:hover { color: var(--red); }
+
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
