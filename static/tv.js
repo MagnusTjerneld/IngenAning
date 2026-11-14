@@ -6,13 +6,20 @@ const render = makeRenderer(app);
 let code = (new URLSearchParams(location.search).get('kod') || '').toUpperCase().slice(0, 4);
 let S = null;
 let message = '';
+let juryDeadline = 0;
+let juryTimer = null;
 const seen = { chips: new Set(), locked: new Set(), round: 0 };
 
 const sock = makeSocket({
   hello: () => (code ? { t: 'tv', code } : null),
   onStatus: () => {},
   onMessage: (m) => {
-    if (m.t === 'state') { S = m.state; draw(); }
+    if (m.t === 'state') {
+      S = m.state;
+      clearTimeout(juryTimer);
+      if (S.phase === 'guess') { juryDeadline = Date.now() + S.round.juryLeft; juryTimer = setTimeout(draw, S.round.juryLeft + 60); }
+      draw();
+    }
     else if (m.t === 'error') { message = m.msg; code = ''; S = null; sock.stop(); draw(); }
   },
 });
@@ -95,6 +102,7 @@ function vote() {
 function guess() {
   const r = S.round;
   const spy = byId(S, S.spyId);
+  const left = Math.max(0, juryDeadline - Date.now());
   return ['guess' + r.n, `
   <div class="stage __ENTER__" style="justify-content:center;align-items:center;text-align:center;--t0:${SUSPENSE_MS}ms">
     ${suspense(S)}
@@ -102,7 +110,8 @@ function guess() {
     <div class="stamp" style="${stampSize(spy.name, '11vw', 110)}">${esc(spy.name)}</div>
     <h1 class="d1">${esc(spy.name)}, vad var ordet?</h1>
     <p class="lead d2">Säg det högt. De andra avgör i mobilen om det var rätt.</p>
-    <p class="lead d2">${r.juryVoted} av ${r.jurySize} har röstat.</p>
+    <p class="lead d2">${left > 0 ? `${r.juryVoted} av ${r.jurySize} har svarat.` : `Tiden är ute. ${esc(byId(S, r.decider).name)} avgör.`}</p>
+    ${left > 0 ? `<div class="d2" style="width:50vw">${timerBar(left)}</div>` : ''}
   </div>`];
 }
 

@@ -13,6 +13,8 @@ let S = null;                  // senaste läget från servern
 let online = true;
 let toast = '';
 let toastTimer = null;
+let juryDeadline = 0;         // lokal klocka för när juryns tid är ute
+let juryTimer = null;
 const urlCode = (new URLSearchParams(location.search).get('kod') || '').toUpperCase().slice(0, 4);
 const L = { round: 0, flipped: false, cardDone: false, closing: false, peek: false, pick: null, chips: new Set(), mode: urlCode ? 'join' : null };
 
@@ -26,6 +28,11 @@ const sock = makeSocket({
       save(session);
     } else if (m.t === 'state') {
       S = m.state;
+      clearTimeout(juryTimer);
+      if (S.phase === 'guess') {
+        juryDeadline = Date.now() + S.round.juryLeft;
+        juryTimer = setTimeout(draw, S.round.juryLeft + 60);
+      }
       draw();
     } else if (m.t === 'error') {
       if (m.fatal) { leave(); }
@@ -197,6 +204,18 @@ function voteKnower(you) {
   </div>`];
 }
 
+function voteBluff() {
+  return ['vote' + S.round.n, `
+  <div class="screen __ENTER__">
+    ${catPill()}
+    <h1>Vem har ingen aning?</h1>
+    <p class="muted">Det är ju du. De andra röstar nu, så låtsas att du också gör det.</p>
+    <div class="foot">
+      <button class="btn" data-act="bluff">Tryck här när du låtsats klart</button>
+    </div>
+  </div>`];
+}
+
 function waiting(you, title, names, key) {
   const text = names.length ? `Väntar på ${names.map(esc).join(', ').replace(/, ([^,]*)$/, ' och $1')}.` : 'Strax klart.';
   return [key + S.round.n, `
@@ -206,21 +225,49 @@ function waiting(you, title, names, key) {
     <h1>${title}</h1>
     <p class="muted">${text}</p>
     ${hostGone(you)}
-    ${you.isHost && names.length ? `<button class="btn ghost slim" data-act="force">Gå vidare utan att vänta</button>` : ''}
+    ${you.isHost && names.length && key === 'wait' ? `<button class="btn ghost slim" data-act="force">Gå vidare utan att vänta</button>` : ''}
   </div>`];
 }
 
-function guessJury() {
+function juryLeft() { return Math.max(0, juryDeadline - Date.now()); }
+
+function guessJury(you) {
   const spy = byId(S, S.spyId);
-  return ['guess' + S.round.n, `
-  <div class="screen staged __ENTER__" style="--t0:${SUSPENSE_MS}ms">
-    ${suspense(S)}
+  const left = juryLeft();
+  const decider = byId(S, S.round.decider);
+  const head = `
     <div class="field center" style="align-items:center">
       <div class="kicker">Den som inte hade en aning</div>
       <div class="stamp" style="${stampSize(spy.name, 'clamp(34px, 7.5dvh, 56px)', 125)}">${esc(spy.name)}</div>
+    </div>`;
+  if (left <= 0 && S.round.decider === you.id) {
+    return ['decide' + S.round.n, `
+  <div class="screen __ENTER__">${head}
+    <h1 style="text-align:center">Tiden är ute. Du avgör</h1>
+    <p class="muted" style="text-align:center">Juryn blev inte klar. Var ${esc(spy.name)}${/[sxz]$/i.test(spy.name) ? '' : 's'} gissning rätt?</p>
+    <div class="foot">
+      <div class="row2">
+        <button class="btn ghost" data-act="decideNo">Underkänn</button>
+        <button class="btn" data-act="decideYes">Godkänn</button>
+      </div>
     </div>
+  </div>`];
+  }
+  if (you.juryVoted) {
+    return ['juried' + S.round.n, `
+  <div class="screen center middle __ENTER__">
+    <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
+    <h1>Tack, juryn räknar</h1>
+    <p class="muted">${left > 0 ? `${S.round.juryVoted} av ${S.round.jurySize} har svarat.` : `Tiden är ute. ${esc(decider.name)} avgör.`}</p>
+    ${left > 0 ? timerBar(left) : ''}
+  </div>`];
+  }
+  return ['guess' + S.round.n, `
+  <div class="screen staged __ENTER__" style="--t0:${SUSPENSE_MS}ms">
+    ${suspense(S)}${head}
     <h1 class="d1" style="text-align:center">Gissade ${esc(spy.name)} rätt?</h1>
-    <p class="muted d1" style="text-align:center">${esc(spy.name)} säger sin gissning högt. Svara när du har hört den. Minst hälften ja räcker.</p>
+    <p class="muted d1" style="text-align:center">${left > 0 ? `${esc(spy.name)} säger sin gissning högt. Svara när du har hört den.` : `Tiden är ute. ${esc(decider.name)} avgör, men du kan fortfarande svara.`}</p>
+    ${left > 0 ? `<div class="d1">${timerBar(left)}</div>` : ''}
     <div class="foot d1">
       <div class="row2">
         <button class="btn ghost" data-act="juryNo">Nej</button>
@@ -241,6 +288,7 @@ function guessSpy() {
     <h1 class="d1">Säg din gissning högt</h1>
     <div class="d1">${catPill()}</div>
     <p class="muted d1">De andra avgör om det var rätt. Har du ingen aning, säg det.</p>
+    ${juryLeft() > 0 ? `<div class="d1" style="align-self:stretch">${timerBar(juryLeft())}</div>` : ''}
   </div>`];
 }
 
@@ -278,14 +326,13 @@ function screen() {
   const inRound = S.players.filter((p) => p.inRound);
   if (S.phase === 'clues') return L.cardDone ? clues(you) : card(you);
   if (S.phase === 'vote') {
-    if (!you.locked) return voteKnower(you); // alla röstar, även den ovetande, så att ingen syns på vad de gör
+    if (!you.locked) return you.role === 'spy' ? voteBluff() : voteKnower(you); // alla trycker, så ingen syns på vad de gör
     const slow = inRound.filter((p) => p.connected && !S.round.locked.includes(p.id)).map((p) => p.name);
     return waiting(you, 'Rösten är låst', slow, 'wait');
   }
   if (S.phase === 'guess') {
     if (you.role === 'spy') return guessSpy();
-    if (you.juryVoted) return waiting(you, 'Tack, juryn räknar', [`${S.round.jurySize - S.round.juryVoted} till`].filter(() => S.round.jurySize > S.round.juryVoted), 'jurywait');
-    return guessJury();
+    return guessJury(you);
   }
   return home();
 }
@@ -345,6 +392,9 @@ const actions = {
   peek() { L.peek = !L.peek; draw(); },
   pick(el) { L.pick = el.dataset.id; draw(); },
   vote() { if (L.pick) sock.send({ t: 'vote', target: L.pick }); },
+  bluff() { sock.send({ t: 'vote', target: '' }); },
+  decideYes() { sock.send({ t: 'decide', ok: true }); },
+  decideNo() { sock.send({ t: 'decide', ok: false }); },
   juryYes() { sock.send({ t: 'jury', ok: true }); },
   juryNo() { sock.send({ t: 'jury', ok: false }); },
   category(el) { sock.send({ t: 'category', id: el.dataset.id }); },

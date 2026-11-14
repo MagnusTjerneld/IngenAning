@@ -98,6 +98,8 @@ def _act(room: Room, pid: str, msg: dict) -> None:
         room.vote(pid, str(msg.get("target", "")))
     elif t == "jury":
         room.jury_vote(pid, bool(msg.get("ok")))
+    elif t == "decide":
+        room.decide(pid, bool(msg.get("ok")))
     elif t == "force":
         room.force_close(pid)
     elif t == "lobby":

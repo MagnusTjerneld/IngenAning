@@ -70,18 +70,17 @@ def play(room, spy_votes=None, jury=()):
     room.vote(r.spy, r.knowers[0])
     assert room.phase == "guess"
     for k, ok in zip(r.knowers, jury):
-        room.jury_vote(k, ok)
-    if room.phase == "guess":
-        room.force_close(room.host_id)
+        if room.phase == "guess":
+            room.jury_vote(k, ok)
     assert room.phase == "reveal"
     return r
 
 
 def test_majority_yes_scores_and_bluff_vote_is_ignored():
     room, ids = make_room(5)
-    r = play(room, jury=[True, True, True, False])
+    r = play(room, jury=[False, True, True, False])
     res = r.result
-    assert res["outcome"] == "approved" and (res["juryYes"], res["juryNo"]) == (3, 1)
+    assert res["outcome"] == "approved" and (res["juryYes"], res["juryNo"]) == (2, 1)  # klart vid hälften ja
     assert res["pointed"] == 4 and res["hid"] is False
     assert sum(t["count"] for t in res["tally"]) == 4  # bluffrösten räknas inte
     assert room.players[r.spy].score == 2
@@ -90,26 +89,62 @@ def test_majority_yes_scores_and_bluff_vote_is_ignored():
 
 def test_jury_tie_goes_to_guesser():
     room, ids = make_room(5)
-    r = play(room, jury=[True, True, False, False])
-    assert r.result["outcome"] == "approved"
+    r = play(room, jury=[False, True, False, True])
+    assert r.result["outcome"] == "approved" and (r.result["juryYes"], r.result["juryNo"]) == (2, 2)
     assert room.players[r.spy].score == 2
 
 
 def test_jury_rejects_and_hidden_bonus():
     room, ids = make_room(5)
-    r = play(room, spy_votes=1, jury=[False, False, False, True])
-    assert r.result["outcome"] == "rejected"
+    r = play(room, spy_votes=1, jury=[False, True, False, False])
+    assert r.result["outcome"] == "rejected" and (r.result["juryYes"], r.result["juryNo"]) == (1, 3)
     assert r.result["hid"] is True  # 1 av 4 pekade ut hen
     assert room.players[r.spy].score == 1
     assert sum(room.players[k].score for k in r.knowers) == 1
 
 
-def test_half_pointing_is_not_hidden_and_no_jury_means_no_points():
+def test_half_pointing_is_not_hidden():
     room, ids = make_room(5)
-    r = play(room, spy_votes=2)
-    assert r.result["outcome"] == "none"
-    assert r.result["hid"] is False
+    r = play(room, spy_votes=2, jury=[False, False, False])
+    assert r.result["outcome"] == "rejected" and r.result["hid"] is False
     assert room.players[r.spy].score == 0
+
+
+def test_spy_bluff_needs_no_target():
+    room, ids = make_room(4)
+    room.start_round(ids[0])
+    r = room.round
+    room.open_vote(ids[0])
+    room.vote(r.spy, "")
+    assert r.spy in room.view_tv()["round"]["locked"]
+    with pytest.raises(GameError):
+        room.vote(r.knowers[0], "")
+
+
+def test_host_decides_after_twenty_seconds():
+    room, ids = make_room(5)
+    clock = [100.0]
+    room.now = lambda: clock[0]
+    room.start_round(ids[0])
+    r = room.round
+    room.open_vote(ids[0])
+    for p in r.participants:
+        room.vote(p, next(x for x in r.participants if x != p))
+    assert room.phase == "guess"
+    decider = room.decider()
+    assert decider in r.knowers and (decider == ids[0] or r.spy == ids[0])
+    assert room.view_tv()["round"]["juryLeft"] == 25000
+    room.jury_vote(next(k for k in r.knowers if k != decider), False)
+    with pytest.raises(GameError):
+        room.decide(decider, True)  # för tidigt
+    clock[0] += 26
+    assert room.view_tv()["round"]["juryLeft"] == 0
+    with pytest.raises(GameError):
+        room.decide(r.spy, True)  # den ovetande avgör aldrig själv
+    room.decide(decider, True)
+    assert room.phase == "reveal"
+    assert r.result["outcome"] == "approved" and r.result["decidedBy"] == decider
+    assert room.players[r.spy].score >= 2
 
 
 def test_only_jurors_decide():
@@ -123,7 +158,7 @@ def test_only_jurors_decide():
         room.vote(p, next(x for x in r.participants if x != p))
     with pytest.raises(GameError):
         room.jury_vote(r.spy, True)  # den ovetande dömer inte sig själv
-    room.jury_vote(r.knowers[0], True)
+    room.jury_vote(r.knowers[0], False)
     with pytest.raises(GameError):
         room.jury_vote(r.knowers[0], True)
 
@@ -141,8 +176,8 @@ def test_disconnect_does_not_block_and_force_works():
     room.set_connected(slow, False)
     assert room.phase == "guess"
     for k in r.knowers:
-        if k != slow:
-            room.jury_vote(k, True)
+        if k != slow and room.phase == "guess":
+            room.jury_vote(k, False)
     assert room.phase == "reveal"  # den frånkopplade jurymedlemmen blockerar inte
 
     room.set_connected(slow, True)
@@ -150,8 +185,8 @@ def test_disconnect_does_not_block_and_force_works():
     room.open_vote(ids[0])
     room.force_close(ids[0])
     assert room.phase == "guess"
-    room.force_close(ids[0])
-    assert room.phase == "reveal"
+    with pytest.raises(GameError):
+        room.force_close(ids[0])  # juryn avgörs av röster eller av den som dömer, inte genom att hoppa över
 
 
 def test_words_do_not_repeat_until_exhausted():
@@ -163,7 +198,7 @@ def test_words_do_not_repeat_until_exhausted():
         seen.append(room.round.word)
         room.open_vote(ids[0])
         room.force_close(ids[0])
-        room.force_close(ids[0])
+        room.jury_vote(room.round.knowers[0], True)
     assert len(set(seen)) == 16
 
 

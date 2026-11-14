@@ -18,6 +18,8 @@ MIN_PLAYERS = 3
 MAX_PLAYERS = 12
 MAX_NAME = 16
 MIX = "blandat"
+SUSPENSE_SECONDS = 5   # rouletten som pekar ut den ovetande
+JURY_SECONDS = 20      # sedan har juryn så här lång tid på sig innan en person får avgöra
 
 CATEGORIES: list[dict] = json.loads(
     (Path(__file__).parent / "words.json").read_text(encoding="utf-8")
@@ -53,6 +55,7 @@ class Round:
     seen: set[str] = field(default_factory=set)
     votes: dict[str, str] = field(default_factory=dict)  # alla röstar, den ovetandes röst är en bluff
     jury: dict[str, bool] = field(default_factory=dict)
+    guess_at: float = 0.0
     result: dict | None = None
 
     @property
@@ -72,6 +75,7 @@ class Room:
         self.round: Round | None = None
         self.round_count = 0
         self.last_active = time.time()
+        self.now = time.monotonic  # går att byta ut i tester
 
     # ---------- spelare ----------
 
@@ -159,22 +163,45 @@ class Room:
         r = self._round_in("vote")
         if pid not in r.participants:
             raise GameError("Du kan inte rösta den här rundan.")
-        if target == pid or target not in r.participants:
-            raise GameError("Välj en annan spelare.")
         if pid in r.votes:
             raise GameError("Din röst är redan låst.")
+        if pid == r.spy:
+            target = ""  # den ovetande trycker bara på en knapp, rösten räknas ändå inte
+        elif target == pid or target not in r.participants:
+            raise GameError("Välj en annan spelare.")
         r.votes[pid] = target
         self._advance_if_ready()
 
     def force_close(self, by: str) -> None:
         """Värden går vidare utan att vänta på de som dröjer."""
         self._require_host(by)
-        if self.phase == "vote":
-            self._close_vote()
-        elif self.phase == "guess":
-            self._finalize()
-        else:
+        if self.phase != "vote":
             raise GameError("Det finns inget att avsluta.")
+        self._close_vote()
+
+    def jury_left(self) -> float:
+        """Sekunder kvar innan en person får avgöra i juryns ställe."""
+        r = self.round
+        if not r or self.phase != "guess":
+            return 0.0
+        return max(0.0, r.guess_at + SUSPENSE_SECONDS + JURY_SECONDS - self.now())
+
+    def decider(self) -> str | None:
+        """Värden avgör om juryn inte blir klar. Är värden själv den ovetande tar första jurymedlemmen över."""
+        r = self.round
+        if not r:
+            return None
+        if self.host_id in r.knowers:
+            return self.host_id
+        return next((p for p in r.knowers if p in self.players and self.players[p].connected), None)
+
+    def decide(self, by: str, ok: bool) -> None:
+        r = self._round_in("guess")
+        if by != self.decider():
+            raise GameError("Det är inte du som avgör.")
+        if self.jury_left() > 1.0:
+            raise GameError("Juryn har lite tid kvar.")
+        self._finalize(decided=bool(ok), decided_by=by)
 
     def jury_vote(self, pid: str, ok: bool) -> None:
         """Den ovetande säger sin gissning högt. Alla som kunde ordet avgör om det var rätt."""
@@ -229,19 +256,26 @@ class Room:
                 self._close_vote()
         elif self.phase == "guess":
             jurors = [p for p in active if p != r.spy]
-            if all(p in r.jury for p in jurors):
+            yes = sum(1 for p in jurors if r.jury.get(p) is True)
+            no = sum(1 for p in jurors if r.jury.get(p) is False)
+            # klart så fort utslaget inte kan ändras: minst hälften ja, eller mer än hälften nej
+            if not jurors or yes * 2 >= len(jurors) or no * 2 > len(jurors):
                 self._finalize()
 
     def _close_vote(self) -> None:
+        assert self.round
+        self.round.guess_at = self.now()
         self.phase = "guess"
         self._advance_if_ready()
 
-    def _finalize(self) -> None:
+    def _finalize(self, decided: bool | None = None, decided_by: str | None = None) -> None:
         r = self.round
         assert r
         yes = sum(1 for v in r.jury.values() if v)
         no = len(r.jury) - yes
-        if yes + no == 0:
+        if decided is not None:
+            outcome = "approved" if decided else "rejected"
+        elif yes + no == 0:
             outcome = "none"
         elif yes >= no:  # minst hälften ja räcker, lika går till den som gissade
             outcome = "approved"
@@ -270,6 +304,7 @@ class Room:
             "outcome": outcome,
             "juryYes": yes,
             "juryNo": no,
+            "decidedBy": decided_by,
             "tally": sorted(
                 ({"id": k, "count": v} for k, v in tally.items()),
                 key=lambda t: -t["count"],
@@ -312,6 +347,8 @@ class Room:
                 if self.phase == "vote" else [],
                 "juryVoted": len(r.jury),
                 "jurySize": len(r.knowers),
+                "juryLeft": int(self.jury_left() * 1000),
+                "decider": self.decider() if self.phase == "guess" else None,
             }
             if self.phase in ("guess", "reveal"):
                 view["spyId"] = r.spy  # rouletten har pekat ut hen

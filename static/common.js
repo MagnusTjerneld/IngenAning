@@ -130,6 +130,14 @@ function suspense(state) {
   </div>`;
 }
 const SUSPENSE_MS = 4800; // måste stämma med --t0 på avslöjandets skärm
+const JURY_MS = 20000;
+
+// Juryns tid som en krympande stapel. left = millisekunder kvar enligt servern, inklusive rouletten.
+function timerBar(left) {
+  const dur = Math.min(left, JURY_MS);
+  const delay = Math.max(0, left - JURY_MS);
+  return `<div class="tbar" aria-hidden="true"><span style="--from:${Math.round((dur / JURY_MS) * 100)}%;animation-duration:${dur}ms;animation-delay:${delay}ms"></span></div>`;
+}
 
 function runSuspense(root) {
   const box = root.querySelector('.enter .suspense');
@@ -160,7 +168,8 @@ function verdict(state, youId) {
   const good = r.outcome === 'approved';
   const stamp = good ? 'Rätt!' : r.outcome === 'rejected' ? 'Fel!' : 'Ingen dom';
   let detail;
-  if (r.outcome === 'none') detail = 'Ingen i juryn röstade, så gissningen gav inga poäng.';
+  if (r.decidedBy) detail = `Juryn hann inte klart, så ${r.decidedBy === youId ? 'du' : esc(byId(state, r.decidedBy).name)} avgjorde: ${good ? 'rätt' : 'fel'}.`;
+  else if (r.outcome === 'none') detail = 'Ingen i juryn röstade, så gissningen gav inga poäng.';
   else if (r.outcome === 'rejected') detail = `${who} gissade fel. Juryn sa nej med ${r.juryNo} mot ${r.juryYes}.`;
   else if (r.juryYes === r.juryNo) detail = `Lika i juryn, ${r.juryYes} mot ${r.juryNo}, och då går det till ${me ? 'dig' : who}.`;
   else detail = `${who} listade ut ordet. Juryn sa ja med ${r.juryYes} mot ${r.juryNo}.`;
