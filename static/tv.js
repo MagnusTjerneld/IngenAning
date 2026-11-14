@@ -33,8 +33,7 @@ function form() {
     <input class="input code" id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" style="text-align:center">
     <button class="btn" data-act="go">Visa på den här skärmen</button>
     ${message ? `<p role="alert" style="color:var(--yellow);font-weight:800">${esc(message)}</p>` : ''}
-    <a class="tvlink" href="/">Gå med som deltagare i stället</a>
-  </div></div>`];
+  </div><a class="tvlink" href="/">Gå med som deltagare i stället</a></div>`];
 }
 
 function lobby() {
