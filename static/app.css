@@ -371,7 +371,7 @@ h1 { font-size: clamp(27px, 5dvh, 36px); }
 .jul .slip { --capr: 24px; }
 .jul .peek { --capr: 16px; }
 .jul .btn:not([disabled])::before, .jul .tile::before, .jul .panel::before, .jul .slip::before, .jul .peek::before, .jul .boardbox::before, .jul .qr::before {
-  content: ""; position: absolute; left: 0; right: 0; top: -2px; height: calc(var(--capr) + 4px); pointer-events: none;
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: calc(var(--capr) + 4px); pointer-events: none;
   border-radius: var(--capr) var(--capr) 0 0;
   background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 14'%3E%3Cpath d='M0 0 H90 V5 C86 5 85 9 81 9 C76 9 76 4 71 5 C66 6 67 13 61 13 C55 13 56 6 50 6 C45 6 45 10 40 10 C35 10 35 4 29 5 C24 6 25 12 19 12 C13 12 14 6 9 6 C5 6 4 5 0 5 Z' fill='%23fff'/%3E%3C/svg%3E") top center / 90px 13px repeat-x;
 }
@@ -380,8 +380,8 @@ h1 { font-size: clamp(27px, 5dvh, 36px); }
 .jul.tv .slip { --capr: 2.4vw; }
 .jul.tv .boardbox { --capr: 2.5vw; }
 .jul.tv .qr { --capr: 2.2vw; }
-.jul.tv .tile::before, .jul.tv .boardbox::before, .jul.tv .slip::before, .jul.tv .qr::before { top: -.25vw; background-size: 9vw 1.4vw; }
-.jul.tv .qr::before { left: -1vw; right: -1vw; top: -1.25vw; }
+.jul.tv .tile::before, .jul.tv .boardbox::before, .jul.tv .slip::before, .jul.tv .qr::before { top: 0; background-size: 9vw 1.4vw; }
+.jul.tv .qr::before { left: -1vw; right: -1vw; top: -1vw; }
 
 /* Tomteluva på alla spelare */
 .jul .dot { position: relative; }
