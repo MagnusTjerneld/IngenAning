@@ -202,6 +202,7 @@ function voteSpy() {
     <div class="field"><label class="kicker" for="guess">Din gissning</label>
       <input class="input" id="guess" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></div>
     <button class="btn" data-act="guess">Lås min gissning</button>
+    <button class="btn ghost slim" data-act="noGuess">Jag har ingen aning</button>
     <p class="muted small">Stavar du nästan rätt får de andra avgöra om det duger.</p>
   </div>`];
 }
@@ -335,7 +336,12 @@ const actions = {
   peek() { L.peek = !L.peek; draw(); },
   pick(el) { L.pick = el.dataset.id; draw(); },
   vote() { if (L.pick) sock.send({ t: 'vote', target: L.pick }); },
-  guess() { sock.send({ t: 'guess', text: document.getElementById('guess').value }); },
+  guess() {
+    const text = document.getElementById('guess').value.trim();
+    if (!text) return say('Skriv en gissning, eller tryck på Jag har ingen aning.');
+    sock.send({ t: 'guess', text });
+  },
+  noGuess() { sock.send({ t: 'guess', text: '' }); },
   juryYes() { sock.send({ t: 'jury', ok: true }); },
   juryNo() { sock.send({ t: 'jury', ok: false }); },
   category(el) { sock.send({ t: 'category', id: el.dataset.id }); },

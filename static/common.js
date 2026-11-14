@@ -80,7 +80,7 @@ function verdict(state, youId) {
   const word = `<b class="word">${esc(r.word)}</b>`;
   let a;
   if (r.outcome === 'exact') a = `${who} skrev rätt ord: ${word}.`;
-  else if (r.outcome === 'none') a = `Ordet var ${word}. ${who} gissade inte.`;
+  else if (r.outcome === 'none') a = `Ordet var ${word}. ${who} hade ingen aning.`;
   else {
     const g = `Ordet var ${word}. ${who} skrev ${esc(r.guess)}`;
     if (r.outcome === 'rejected') a = `${g}, och juryn sa nej med ${r.juryNo} mot ${r.juryYes}.`;
