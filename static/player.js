@@ -117,6 +117,8 @@ function lobby(you) {
   </div>`];
 }
 
+const catPill = () => `<div class="cat"><span>Kategori</span><b>${esc(S.round.category)}</b></div>`;
+
 function hostGone(you) {
   const host = byId(S, S.hostId);
   if (you.isHost || host.connected) return '';
@@ -135,9 +137,9 @@ function spectator() {
 function card(you) {
   const back = you.role === 'spy'
     ? `<span class="q">?</span><span class="big sub">Du har ingen aning</span>
-       <span class="note">Kategorin är ${esc(S.round.category)}. Lyssna, smält in och lista ut ordet.</span>`
+       <span class="note">Men kategorin är</span><span class="word catword">${esc(S.round.category)}</span>`
     : `<span class="note">Ordet är</span><span class="word">${esc(you.word)}</span>
-       <span class="note">Kategori ${esc(S.round.category)}. En av er vet inte, så avslöja inte för mycket.</span>`;
+       <span class="note">Kategori</span><span class="catword ink">${esc(S.round.category)}</span>`;
   return ['card' + S.round.n, `
   <div class="screen center __ENTER__">
     <h1>Din lapp</h1>
@@ -146,7 +148,7 @@ function card(you) {
       <span class="knob" aria-hidden="true"></span><span class="string" aria-hidden="true"></span>
       <button class="tag" data-act="flip" aria-label="Vänd lappen">
         <span class="inner">
-          <span class="face front"><span class="big">Till dig</span><span class="note">Tryck för att vända</span></span>
+          <span class="face front"><span class="gj">God jul</span><span class="big">Till dig</span><span class="note">Tryck för att vända</span></span>
           <span class="face back">${back}</span>
         </span>
       </button>
@@ -165,7 +167,7 @@ function clues(you) {
   const peekText = you.role === 'spy' ? `${esc(S.round.category)}, men vad?` : esc(you.word);
   return ['clues' + S.round.n, `
   <div class="screen center __ENTER__">
-    <div class="kicker">Först ut</div>
+    ${catPill()}
     ${dot(starter, 'avatar')}
     <h1>${mine ? 'Du börjar' : `${esc(starter.name)} börjar`}</h1>
     <p class="muted">Ett ord var, sedan medsols. ${lapsText(S.round.laps)}</p>
@@ -184,6 +186,7 @@ function voteKnower(you) {
   const others = S.players.filter((p) => p.inRound && p.id !== you.id);
   return ['vote' + S.round.n, `
   <div class="screen __ENTER__">
+    ${catPill()}
     <h1>Vem har ingen aning?</h1>
     <div class="grid2 ${others.length > 6 ? 'three' : ''}">${others.map((p) => `
       <button class="vote ${L.pick === p.id ? 'on' : ''}" data-act="pick" data-id="${esc(p.id)}" aria-pressed="${L.pick === p.id}">${dot(p)}<span>${esc(p.name)}</span></button>`).join('')}
@@ -197,6 +200,7 @@ function voteKnower(you) {
 function voteSpy() {
   return ['vote' + S.round.n, `
   <div class="screen __ENTER__">
+    ${catPill()}
     <h1>Vad var ordet?</h1>
     <p class="muted">De andra röstar nu, och det ser ut som att du också gör det.</p>
     <div class="field"><label class="kicker" for="guess">Din gissning</label>
@@ -211,6 +215,7 @@ function waiting(you, title, names, key) {
   const text = names.length ? `Väntar på ${names.map(esc).join(', ').replace(/, ([^,]*)$/, ' och $1')}.` : 'Strax klart.';
   return [key + S.round.n, `
   <div class="screen center middle __ENTER__">
+    ${catPill()}
     <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
     <h1>${title}</h1>
     <p class="muted">${text}</p>
@@ -242,15 +247,17 @@ function reveal(you) {
   const host = byId(S, S.hostId);
   const votes = r.tally.map((t) => `${t.id === r.spyId ? '<b style="color:var(--yellow)">' : '<b style="color:var(--cream)">'}${esc(byId(S, t.id).name)} ${t.count}</b>`).join(', ');
   return ['reveal' + S.round.n, `
-  <div class="screen tight __ENTER__">
+  <div class="screen tight __ENTER__" style="--t0:${SUSPENSE_MS}ms">
+    ${suspense(S)}
     <div class="field center" style="align-items:center">
-      <div class="kicker">Den som inte hade en aning</div>
-      <div class="stamp">${v.me ? 'Du' : esc(v.spy.name)}</div>
+      <div class="kicker hold">Den som inte hade en aning</div>
+      <div class="stamp" style="font-size:min(clamp(34px, 7.5dvh, 56px), ${Math.round(1250 / Math.max(4, v.me ? 2 : v.spy.name.length)) / 10}vw)">${v.me ? 'Du' : esc(v.spy.name)}</div>
     </div>
-    <p class="d1" style="text-align:center">${v.a} ${v.b}</p>
-    ${votes ? `<p class="muted small d2" style="text-align:center">Röster: ${votes}</p>` : ''}
-    <div class="panel board d3 ${S.players.length > 4 ? 'two' : ''}"><div class="kicker">Ställning</div>${boardLines(S)}</div>
-    <div class="foot">
+    <p class="rword d1">${v.word}</p>
+    <p class="rguess d2">${v.guess} ${v.badge}</p>
+    <p class="muted small d3" style="text-align:center">${v.pointed}${votes && S.players.length <= 8 ? ` Röster: ${votes}` : ''}</p>
+    <div class="panel board d4 ${S.players.length > 4 ? 'two' : ''} ${S.players.length > 8 ? 'dense' : ''}"><div class="kicker">Ställning</div>${boardLines(S)}</div>
+    <div class="foot hold last">
       ${hostGone(you)}
       ${you.isHost
         ? `<div class="footrow"><button class="btn" data-act="start">En runda till</button><button class="btn ghost" data-act="lobby" style="font-size:16px">Byt kategori</button></div>`
@@ -289,6 +296,7 @@ function draw() {
     + (toast ? `<div class="toast" role="alert">${esc(toast)}</div>` : '');
   document.body.classList.toggle('drift', /^(home|connecting|spectator|wait|jurywait)/.test(key));
   render(key, html + extra);
+  runSuspense(app);
 }
 
 // ---------- händelser ----------

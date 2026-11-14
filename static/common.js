@@ -88,23 +88,55 @@ function makeSocket({ hello, onMessage, onStatus }) {
   };
 }
 
+const SUSPENSE = ['Den som inte hade en aning var', 'Nu spricker bluffen', 'Någon här har gissat sig fram', 'Vem nickade med utan att fatta?', 'En av er visste ingenting'];
+
+// Rouletten före avslöjandet: strålkastaren hoppar mellan spelarna, saktar in och stannar på den ovetande.
+function suspense(state) {
+  const people = state.players.filter((p) => p.inRound);
+  return `<div class="suspense" data-spy="${esc(state.result.spyId)}" aria-hidden="true">
+    <div class="kicker">${SUSPENSE[(state.round.n - 1) % SUSPENSE.length]}</div>
+    <div class="ring">${people.map((p) => `<span class="who" data-id="${esc(p.id)}">${dot(p)}<span class="nm">${esc(p.name)}</span></span>`).join('')}</div>
+    <div class="dots"><span></span><span></span><span></span></div>
+  </div>`;
+}
+const SUSPENSE_MS = 4800; // måste stämma med --t0 på avslöjandets skärm
+
+function runSuspense(root) {
+  const box = root.querySelector('.enter .suspense');
+  if (!box || box.dataset.run) return;
+  box.dataset.run = '1';
+  const who = [...box.querySelectorAll('.who')];
+  const spy = who.findIndex((w) => w.dataset.id === box.dataset.spy);
+  if (spy < 0 || matchMedia('(prefers-reduced-motion: reduce)').matches) { box.classList.add('gone'); return; }
+  const steps = [];
+  for (let t = 0, d = 70; t < 3000; t += d, d *= 1.09) steps.push(t);
+  const n = who.length;
+  const start = (((spy - (steps.length - 1)) % n) + n) % n;
+  steps.forEach((at, k) => setTimeout(() => {
+    who.forEach((w) => w.classList.remove('hot'));
+    who[(start + k) % n].classList.add('hot');
+  }, at));
+  setTimeout(() => box.classList.add('found'), 3300);
+  setTimeout(() => box.classList.add('gone'), SUSPENSE_MS - 150);
+}
+
 function verdict(state, youId) {
   const r = state.result;
   const spy = byId(state, r.spyId);
   const me = r.spyId === youId;
   const who = me ? 'Du' : esc(spy.name);
-  const word = `<b class="word">${esc(r.word)}</b>`;
-  let a;
-  if (r.outcome === 'exact') a = `${who} skrev rätt ord: ${word}.`;
-  else if (r.outcome === 'none') a = `Ordet var ${word}. ${who} hade ingen aning.`;
+  const word = `Ordet var <b class="word">${esc(r.word)}</b>`;
+  let guess; let badge; let good = true;
+  if (r.outcome === 'none') { guess = `${who} hade ingen aning`; badge = 'Ingen gissning'; good = false; }
   else {
-    const g = `Ordet var ${word}. ${who} skrev ${esc(r.guess)}`;
-    if (r.outcome === 'rejected') a = `${g}, och juryn sa nej med ${r.juryNo} mot ${r.juryYes}.`;
-    else if (r.juryYes === r.juryNo) a = `${g}. Juryn blev oenig, ${r.juryYes} mot ${r.juryNo}, och lika går till den som gissade.`;
-    else a = `${g}, och juryn godkände med ${r.juryYes} mot ${r.juryNo}.`;
+    guess = `${who} skrev <b>${esc(r.guess)}</b>`;
+    if (r.outcome === 'exact') badge = 'Mitt i prick';
+    else if (r.outcome === 'rejected') { badge = `Juryn sa nej, ${r.juryNo} mot ${r.juryYes}`; good = false; }
+    else if (r.juryYes === r.juryNo) badge = `Lika i juryn, ${r.juryYes} mot ${r.juryNo}: godkänt`;
+    else badge = `Juryn sa ja, ${r.juryYes} mot ${r.juryNo}`;
   }
-  const b = `${r.pointed === 0 ? 'Ingen' : `${r.pointed} av ${r.knowers}`} pekade ut ${me ? 'dig' : esc(spy.name)}${r.hid ? ', så det blev en bonuspoäng för att smälta in.' : '.'}`;
-  return { a, b, spy, me };
+  const pointed = `${r.pointed === 0 ? 'Ingen' : `${r.pointed} av ${r.knowers}`} pekade ut ${me ? 'dig' : esc(spy.name)}${r.hid ? ', bonuspoäng för att smälta in.' : '.'}`;
+  return { word, guess, badge: `<span class="outcome ${good ? '' : 'no'}">${badge}</span>`, pointed, spy, me };
 }
 
 function boardLines(state) {

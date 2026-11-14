@@ -109,15 +109,17 @@ function jury() {
 function reveal() {
   const v = verdict(S, null);
   return ['reveal' + S.round.n, `
-  <div class="stage __ENTER__" style="justify-content:center">
+  <div class="stage __ENTER__" style="justify-content:center;--t0:${SUSPENSE_MS}ms">
+    ${suspense(S)}
     <div class="split">
       <div class="col">
-        <div class="kicker">Den som inte hade en aning</div>
-        <div class="stamp">${esc(v.spy.name)}</div>
-        <p class="lead d1" style="color:var(--cream);margin-top:2vh">${v.a}</p>
-        <p class="lead d2">${v.b}</p>
+        <div class="kicker hold">Den som inte hade en aning</div>
+        <div class="stamp" style="font-size:min(11vw, ${Math.round(700 / Math.max(4, v.spy.name.length)) / 10}vw)">${esc(v.spy.name)}</div>
+        <p class="lead rword d1" style="color:var(--cream);margin-top:2vh">${v.word}</p>
+        <p class="lead rguess d2" style="color:var(--cream)">${v.guess} ${v.badge}</p>
+        <p class="lead d3">${v.pointed}</p>
       </div>
-      <div class="boardbox d3"><div class="kicker">Ställning</div>${boardLines(S)}</div>
+      <div class="boardbox d4"><div class="kicker">Ställning</div>${boardLines(S)}</div>
     </div>
   </div>`];
 }
@@ -128,6 +130,7 @@ function draw() {
   const view = { lobby, clues, vote, jury, reveal }[S.phase] || lobby;
   const [key, html] = view();
   render(key, html);
+  runSuspense(app);
 }
 
 function go() {
