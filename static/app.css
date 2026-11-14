@@ -359,25 +359,29 @@ h1 { font-size: clamp(27px, 5dvh, 36px); }
 .jul .btn.ghost { position: relative; border: 0; background: var(--green); color: var(--cream); box-shadow: 0 6px 0 #134A33; }
 .jul .btn.ghost:active { transform: translateY(4px); box-shadow: 0 2px 0 #134A33; }
 .jul .btn.ghost.slim { box-shadow: 0 4px 0 #134A33; }
-.jul .btn.ghost::before {
-  content: ""; position: absolute; left: 15px; right: 15px; top: -5px; height: 14px; pointer-events: none; border-radius: 7px 7px 5px 5px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 14'%3E%3Cpath d='M0 0 H90 V5 C86 5 85 9 81 9 C76 9 76 4 71 5 C66 6 67 13 61 13 C55 13 56 6 50 6 C45 6 45 10 40 10 C35 10 35 4 29 5 C24 6 25 12 19 12 C13 12 14 6 9 6 C5 6 4 5 0 5 Z' fill='%23fff'/%3E%3C/svg%3E") repeat-x; background-size: 90px 14px;
-}
 .jul .btn + .btn, .jul .btn + .peek { margin-top: 6px; }
-.jul .btn.slim::before { left: 12px; right: 12px; top: -4px; height: 11px; background-size: 70px 11px; }
 
-/* Snö som ligger ovanpå knappar och rutor */
-.jul .btn:not(.ghost):not([disabled]), .jul .tile, .jul .panel, .jul .slip, .jul .peek, .jul .boardbox, .jul .qr { position: relative; }
-.jul .foot .btn:not(.ghost):not([disabled]), .jul .screen > .btn:not(.ghost)::before { position: relative; }
-.jul .btn:not(.ghost):not([disabled])::before, .jul .tile::before, .jul .panel::before, .jul .slip::before, .jul .peek::before, .jul .boardbox::before, .jul .qr::before {
-  content: ""; position: absolute; left: 15px; right: 15px; top: -5px; height: 14px; pointer-events: none; border-radius: 7px 7px 5px 5px;
-  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 14'%3E%3Cpath d='M0 0 H90 V5 C86 5 85 9 81 9 C76 9 76 4 71 5 C66 6 67 13 61 13 C55 13 56 6 50 6 C45 6 45 10 40 10 C35 10 35 4 29 5 C24 6 25 12 19 12 C13 12 14 6 9 6 C5 6 4 5 0 5 Z' fill='%23fff'/%3E%3C/svg%3E") repeat-x; background-size: 90px 14px;
+/* Snö som ligger på knappar och rutor. Snötäcket har samma rundning som rutan under (--capr)
+   och ligger bara ett par pixlar ovanför kanten, så att det vilar på den i stället för att sväva. */
+.jul .btn:not([disabled]), .jul .tile, .jul .panel, .jul .slip, .jul .peek, .jul .boardbox, .jul .qr { position: relative; }
+.jul .btn { --capr: 20px; }
+.jul .btn.slim { --capr: 16px; }
+.jul .tile { --capr: 14px; }
+.jul .panel { --capr: 18px; }
+.jul .slip { --capr: 24px; }
+.jul .peek { --capr: 16px; }
+.jul .btn:not([disabled])::before, .jul .tile::before, .jul .panel::before, .jul .slip::before, .jul .peek::before, .jul .boardbox::before, .jul .qr::before {
+  content: ""; position: absolute; left: 0; right: 0; top: -2px; height: calc(var(--capr) + 4px); pointer-events: none;
+  border-radius: var(--capr) var(--capr) 0 0;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 90 14'%3E%3Cpath d='M0 0 H90 V5 C86 5 85 9 81 9 C76 9 76 4 71 5 C66 6 67 13 61 13 C55 13 56 6 50 6 C45 6 45 10 40 10 C35 10 35 4 29 5 C24 6 25 12 19 12 C13 12 14 6 9 6 C5 6 4 5 0 5 Z' fill='%23fff'/%3E%3C/svg%3E") top center / 90px 13px repeat-x;
 }
-.jul .tile::before { left: 6px; right: 6px; top: -4px; height: 9px; background-size: 58px 9px; border-radius: 5px 5px 3px 3px; }
-.jul .slip::before { left: 22px; right: 22px; top: -6px; }
-.jul .panel::before { left: 16px; right: 16px; }
-.jul.tv .tile::before, .jul.tv .boardbox::before, .jul.tv .qr::before, .jul.tv .slip::before { left: 1.6vw; right: 1.6vw; top: -.5vw; height: 1.5vw; background-size: 9.6vw 1.5vw; border-radius: .8vw .8vw .5vw .5vw; }
-.jul.tv .slip::before, .jul.tv .boardbox::before { left: 2.4vw; right: 2.4vw; }
+.jul .tile::before { background-size: 52px 9px; }
+.jul.tv .tile { --capr: 1.8vw; }
+.jul.tv .slip { --capr: 2.4vw; }
+.jul.tv .boardbox { --capr: 2.5vw; }
+.jul.tv .qr { --capr: 2.2vw; }
+.jul.tv .tile::before, .jul.tv .boardbox::before, .jul.tv .slip::before, .jul.tv .qr::before { top: -.25vw; background-size: 9vw 1.4vw; }
+.jul.tv .qr::before { left: -1vw; right: -1vw; top: -1.25vw; }
 
 /* Tomteluva på alla spelare */
 .jul .dot { position: relative; }
