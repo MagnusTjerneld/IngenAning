@@ -78,6 +78,7 @@ function home() {
     <div class="grow"></div>
     ${body}
     <div class="grow"></div>
+    <a class="tvlink" href="/tv">Visa spelet på en TV eller stor skärm</a>
   </div>`];
 }
 
@@ -92,25 +93,27 @@ function lobby(you) {
   const catName = (cats.find((c) => c.id === S.categoryId) || cats[0]).name;
   const host = byId(S, S.hostId);
   const pick = you.isHost
-    ? `<div class="field"><div class="kicker">Kategori</div><div class="pills">${cats.map((c) =>
+    ? `<div class="field"><div class="kicker">Kategori, svep för fler</div><div class="pills scrollx">${cats.map((c) =>
         `<button class="pill ${c.id === S.categoryId ? 'on' : ''}" data-act="category" data-id="${esc(c.id)}" aria-pressed="${c.id === S.categoryId}">${esc(c.name)}</button>`).join('')}</div></div>`
-    : `<div class="panel muted">Kategori <b style="color:var(--cream)">${esc(catName)}</b>.</div>`;
+    : `<p class="muted">Kategori <b style="color:var(--cream)">${esc(catName)}</b>.</p>`;
   const action = you.isHost
     ? (active >= S.minPlayers
       ? `<button class="btn" data-act="start">Starta rundan</button>`
       : `<button class="btn" disabled>Ni behöver vara minst tre</button>`)
-    : `<p class="muted center" style="text-align:center">${esc(host.name)} startar rundan.</p>`;
+    : `<p class="muted" style="text-align:center">${esc(host.name)} startar rundan.</p>`;
   return ['lobby', `
   <div class="screen __ENTER__">
-    <div class="field"><div class="kicker">Rumskod</div>${tiles(S.code)}</div>
-    <h1>${active === 1 ? 'Du är först här' : `${active} är med`}</h1>
-    <div class="chips">${chips}</div>
+    <div class="toprow">
+      <div class="field"><div class="kicker">Rumskod</div>${tiles(S.code)}</div>
+      <button class="link" data-act="leave">Lämna</button>
+    </div>
+    ${S.players.length > 8 ? `<div class="kicker">${active} är med</div>` : `<h1>${active === 1 ? 'Du är först här' : `${active} är med`}</h1>`}
+    <div class="chips ${S.players.length > 8 ? 'dense' : ''}">${chips}</div>
     ${pick}
-    <p class="muted small">Stor skärm i rummet? Öppna ${esc(location.host)}/tv där och skriv koden.</p>
-    <div class="grow"></div>
-    ${hostGone(you)}
-    ${action}
-    <button class="btn ghost slim" data-act="leave">Lämna rummet</button>
+    <div class="foot">
+      ${hostGone(you)}
+      ${action}
+    </div>
   </div>`];
 }
 
@@ -131,7 +134,7 @@ function spectator() {
 
 function card(you) {
   const back = you.role === 'spy'
-    ? `<span class="q">?</span><span class="big" style="font-size:28px">Du har ingen aning</span>
+    ? `<span class="q">?</span><span class="big sub">Du har ingen aning</span>
        <span class="note">Kategorin är ${esc(S.round.category)}. Lyssna, smält in och lista ut ordet.</span>`
     : `<span class="note">Ordet är</span><span class="word">${esc(you.word)}</span>
        <span class="note">Kategori ${esc(S.round.category)}. En av er vet inte, så avslöja inte för mycket.</span>`;
@@ -143,13 +146,15 @@ function card(you) {
       <span class="knob" aria-hidden="true"></span><span class="string" aria-hidden="true"></span>
       <button class="tag" data-act="flip" aria-label="Vänd lappen">
         <span class="inner">
-          <span class="face front"><span class="big">Till dig</span><span>Tryck för att vända</span></span>
+          <span class="face front"><span class="big">Till dig</span><span class="note">Tryck för att vända</span></span>
           <span class="face back">${back}</span>
         </span>
       </button>
     </div>
-    <div class="grow"></div>
-    <div class="after"><p class="muted small" style="margin-bottom:10px">Tryck på lappen igen eller på knappen när du har läst.</p><button class="btn" data-act="cardDone">Jag har sett, göm lappen</button></div>
+    <div class="foot after">
+      <p class="muted small">Tryck på lappen igen eller på knappen när du har läst.</p>
+      <button class="btn" data-act="cardDone">Jag har sett, göm lappen</button>
+    </div>
   </div>`];
 }
 
@@ -162,15 +167,16 @@ function clues(you) {
   <div class="screen center __ENTER__">
     <div class="kicker">Först ut</div>
     ${dot(starter, 'avatar')}
-    <h1 style="font-size:42px">${mine ? 'Du börjar' : `${esc(starter.name)} börjar`}</h1>
-    <p class="muted" style="font-size:19px">Ett ord var, sedan medsols.<br>${lapsText(S.round.laps)}</p>
+    <h1>${mine ? 'Du börjar' : `${esc(starter.name)} börjar`}</h1>
+    <p class="muted">Ett ord var, sedan medsols. ${lapsText(S.round.laps)}</p>
     <button class="btn ghost slim" data-act="peek">${L.peek ? 'Göm lappen' : 'Kika på min lapp'}</button>
     ${L.peek ? `<div class="peek">${peekText}</div>` : ''}
-    <div class="grow"></div>
-    ${hostGone(you)}
-    ${you.isHost
-      ? `<button class="btn" data-act="openVote" style="align-self:stretch">Alla har sagt sitt</button>`
-      : `<p class="muted">${esc(host.name)} startar röstningen.</p>`}
+    <div class="foot">
+      ${hostGone(you)}
+      ${you.isHost
+        ? `<button class="btn" data-act="openVote">Alla har sagt sitt</button>`
+        : `<p class="muted">${esc(host.name)} startar röstningen.</p>`}
+    </div>
   </div>`];
 }
 
@@ -179,11 +185,12 @@ function voteKnower(you) {
   return ['vote' + S.round.n, `
   <div class="screen __ENTER__">
     <h1>Vem har ingen aning?</h1>
-    <div class="grid2">${others.map((p) => `
+    <div class="grid2 ${others.length > 6 ? 'three' : ''}">${others.map((p) => `
       <button class="vote ${L.pick === p.id ? 'on' : ''}" data-act="pick" data-id="${esc(p.id)}" aria-pressed="${L.pick === p.id}">${dot(p)}<span>${esc(p.name)}</span></button>`).join('')}
     </div>
-    <div class="grow"></div>
-    ${L.pick ? `<button class="btn" data-act="vote">Lås min röst</button>` : `<button class="btn" disabled>Välj en person</button>`}
+    <div class="foot">
+      ${L.pick ? `<button class="btn" data-act="vote">Lås min röst</button>` : `<button class="btn" disabled>Välj en person</button>`}
+    </div>
   </div>`];
 }
 
@@ -193,10 +200,9 @@ function voteSpy() {
     <h1>Vad var ordet?</h1>
     <p class="muted">De andra röstar nu, och det ser ut som att du också gör det.</p>
     <div class="field"><label class="kicker" for="guess">Din gissning</label>
-      <input class="input" id="guess" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
-    <p class="muted small">Stavar du nästan rätt får de andra avgöra om det duger.</p>
-    <div class="grow"></div>
+      <input class="input" id="guess" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></div>
     <button class="btn" data-act="guess">Lås min gissning</button>
+    <p class="muted small">Stavar du nästan rätt får de andra avgöra om det duger.</p>
   </div>`];
 }
 
@@ -205,7 +211,7 @@ function waiting(you, title, names, key) {
   return [key + S.round.n, `
   <div class="screen center middle __ENTER__">
     <div class="dots" aria-hidden="true"><span></span><span></span><span></span></div>
-    <h1 style="font-size:30px">${title}</h1>
+    <h1>${title}</h1>
     <p class="muted">${text}</p>
     ${hostGone(you)}
     ${you.isHost && names.length ? `<button class="btn ghost slim" data-act="force">Gå vidare utan att vänta</button>` : ''}
@@ -220,10 +226,11 @@ function jury() {
     <div class="slip guess"><span>Gissningen</span><b>${esc(S.jury.guess)}</b></div>
     <div class="slip truth"><span>Ordet var</span><b>${esc(S.jury.word)}</b></div>
     <p class="muted small">Blir det lika vinner den som gissade.</p>
-    <div class="grow"></div>
-    <div class="row2">
-      <button class="btn ghost" data-act="juryNo">Nej</button>
-      <button class="btn" data-act="juryYes">Ja, det duger</button>
+    <div class="foot">
+      <div class="row2">
+        <button class="btn ghost" data-act="juryNo">Nej</button>
+        <button class="btn" data-act="juryYes">Ja, det duger</button>
+      </div>
     </div>
   </div>`];
 }
@@ -232,26 +239,22 @@ function reveal(you) {
   const r = S.result;
   const v = verdict(S, you.id);
   const host = byId(S, S.hostId);
-  const bars = r.tally.map((t) => {
-    const p = byId(S, t.id);
-    return `<div class="bar"><span class="name">${esc(p.name)}</span>
-      <span class="track"><span class="fill ${t.id === r.spyId ? 'spy' : ''}" style="width:${Math.round((t.count / Math.max(1, r.knowers)) * 100)}%"></span></span>
-      <span class="n">${t.count}</span></div>`;
-  }).join('');
+  const votes = r.tally.map((t) => `${t.id === r.spyId ? '<b style="color:var(--yellow)">' : '<b style="color:var(--cream)">'}${esc(byId(S, t.id).name)} ${t.count}</b>`).join(', ');
   return ['reveal' + S.round.n, `
-  <div class="screen __ENTER__" style="gap:14px">
+  <div class="screen tight __ENTER__">
     <div class="field center" style="align-items:center">
       <div class="kicker">Den som inte hade en aning</div>
       <div class="stamp">${v.me ? 'Du' : esc(v.spy.name)}</div>
     </div>
     <p class="d1" style="text-align:center">${v.a} ${v.b}</p>
-    ${bars ? `<div class="bars d2"><div class="kicker">Rösterna</div>${bars}</div>` : ''}
-    <div class="panel board d3"><div class="kicker">Ställning</div>${boardLines(S)}</div>
-    <div class="grow"></div>
-    ${hostGone(you)}
-    ${you.isHost
-      ? `<button class="btn" data-act="start">En runda till</button><button class="btn ghost slim" data-act="lobby">Byt kategori</button>`
-      : `<p class="muted" style="text-align:center">${esc(host.name)} startar nästa runda.</p>`}
+    ${votes ? `<p class="muted small d2" style="text-align:center">Röster: ${votes}</p>` : ''}
+    <div class="panel board d3 ${S.players.length > 4 ? 'two' : ''}"><div class="kicker">Ställning</div>${boardLines(S)}</div>
+    <div class="foot">
+      ${hostGone(you)}
+      ${you.isHost
+        ? `<div class="footrow"><button class="btn" data-act="start">En runda till</button><button class="btn ghost" data-act="lobby" style="font-size:16px">Byt kategori</button></div>`
+        : `<p class="muted" style="text-align:center">${esc(host.name)} startar nästa runda.</p>`}
+    </div>
   </div>`];
 }
 
