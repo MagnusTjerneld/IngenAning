@@ -321,6 +321,16 @@ h1 { font-size: clamp(27px, 5dvh, 36px); }
 .tv .who .dot { --s: 7vw; }
 .tv .who.hot .dot { box-shadow: 0 0 0 .5vw var(--yellow); }
 
+/* Skärmar som byggs upp steg för steg: allt väntar på --t0, sedan d1 till d4 i tur och ordning */
+.enter.staged > *:not(.suspense) { animation: rise .4s var(--t0, 0s) both; }
+.enter.staged > .now { animation-delay: 0s; }
+.enter.staged > .d1 { animation-delay: calc(var(--t0, 0s) + 1.2s); }
+.enter.staged > .d2 { animation-delay: calc(var(--t0, 0s) + 2.3s); }
+.enter.staged > .d3 { animation-delay: calc(var(--t0, 0s) + 3.2s); }
+.enter.staged > .d4 { animation-delay: calc(var(--t0, 0s) + 3.9s); }
+.enter.staged > .last { animation-delay: calc(var(--t0, 0s) + 4.6s); }
+.stamp.no { color: var(--cream); border-color: var(--cream); }
+
 /* Utslaget, rad för rad */
 .rword { text-align: center; font-size: 18px; }
 .rword .word { font-family: var(--display); font-weight: 700; font-size: 1.5em; color: var(--yellow); }

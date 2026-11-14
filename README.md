@@ -7,12 +7,12 @@ Partyspel för ett rum fullt av folk. Alla utom en får samma ord på mobilen. N
 1. En startar ett rum och blir värd. Övriga går in med rumskoden eller QR-koden på TV:n.
 2. Alla vänder sin lapp. En spelare får bara veta kategorin.
 3. Appen slumpar vem som börjar. Ett ord var, medsols. Ett varv om ni är sex eller fler, annars två.
-4. Värden trycker "Alla har sagt sitt". De som kan ordet röstar på vem som är ovetande, och den ovetande skriver sin gissning samtidigt.
-5. Stämmer gissningen inte exakt avgör juryn (alla som kunde ordet). Lika går till den som gissade.
+4. Värden trycker "Alla har sagt sitt". Alla röstar på vem som är ovetande. Även den ovetande trycker, så att ingen avslöjas av vad de gör med mobilen, men den rösten räknas inte.
+5. Den ovetande pekas ut och säger sin gissning högt. Alla som kunde ordet svarar ja eller nej i mobilen. Minst hälften ja räcker, så lika går till den som gissade.
 
 Poäng: 1 för rätt röst. Den ovetande får 2 för rätt ord och 1 om färre än hälften pekade ut hen.
 
-TV-vyn finns på `/tv`. Den visar rumskod, vilka som låst sin röst, juryn och ställningen, men aldrig ordet i förväg.
+TV-vyn finns på `/tv`. Den visar rumskod, vilka som låst sin röst, vem som pekats ut och ställningen, men aldrig ordet förrän juryn har röstat.
 
 ## Köra lokalt
 

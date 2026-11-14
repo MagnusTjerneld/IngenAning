@@ -17,7 +17,6 @@ CODE_ALPHABET = "ABCDEFGHJKLMNPRSTUVXYZ"
 MIN_PLAYERS = 3
 MAX_PLAYERS = 12
 MAX_NAME = 16
-MAX_GUESS = 40
 MIX = "blandat"
 
 CATEGORIES: list[dict] = json.loads(
@@ -25,26 +24,8 @@ CATEGORIES: list[dict] = json.loads(
 )
 _CAT_BY_ID = {c["id"]: c for c in CATEGORIES}
 
-_SUFFIXES = ("", "n", "en", "et", "t", "an", "na", "ar", "er", "or", "arna", "erna", "orna", "s")
-
-
 class GameError(Exception):
     """Fel som ska visas för spelaren."""
-
-
-def normalize(text: str) -> str:
-    text = re.sub(r"[^a-zåäöéà ]", "", text.lower().strip())
-    return re.sub(r"\s+", " ", text).strip()
-
-
-def is_exact(guess: str, word: str) -> bool:
-    """Exakt träff, förlåtande för versaler, mellanslag och bestämd form."""
-    g, w = normalize(guess), normalize(word)
-    if not g:
-        return False
-    if g.replace(" ", "") == w.replace(" ", ""):
-        return True
-    return any(g == w + s for s in _SUFFIXES)
 
 
 def laps_for(player_count: int) -> int:
@@ -70,8 +51,7 @@ class Round:
     starter: str
     laps: int
     seen: set[str] = field(default_factory=set)
-    votes: dict[str, str] = field(default_factory=dict)
-    guess: str | None = None
+    votes: dict[str, str] = field(default_factory=dict)  # alla röstar, den ovetandes röst är en bluff
     jury: dict[str, bool] = field(default_factory=dict)
     result: dict | None = None
 
@@ -177,7 +157,7 @@ class Room:
 
     def vote(self, pid: str, target: str) -> None:
         r = self._round_in("vote")
-        if pid not in r.knowers:
+        if pid not in r.participants:
             raise GameError("Du kan inte rösta den här rundan.")
         if target == pid or target not in r.participants:
             raise GameError("Välj en annan spelare.")
@@ -186,27 +166,19 @@ class Room:
         r.votes[pid] = target
         self._advance_if_ready()
 
-    def guess(self, pid: str, text: str) -> None:
-        r = self._round_in("vote")
-        if pid != r.spy:
-            raise GameError("Du kan inte gissa den här rundan.")
-        if r.guess is not None:
-            raise GameError("Din gissning är redan låst.")
-        r.guess = re.sub(r"\s+", " ", text).strip()[:MAX_GUESS]
-        self._advance_if_ready()
-
     def force_close(self, by: str) -> None:
         """Värden går vidare utan att vänta på de som dröjer."""
         self._require_host(by)
         if self.phase == "vote":
             self._close_vote()
-        elif self.phase == "jury":
+        elif self.phase == "guess":
             self._finalize()
         else:
             raise GameError("Det finns inget att avsluta.")
 
     def jury_vote(self, pid: str, ok: bool) -> None:
-        r = self._round_in("jury")
+        """Den ovetande säger sin gissning högt. Alla som kunde ordet avgör om det var rätt."""
+        r = self._round_in("guess")
         if pid not in r.knowers:
             raise GameError("Du sitter inte i juryn.")
         if pid in r.jury:
@@ -244,9 +216,8 @@ class Room:
         return category, word
 
     def _is_locked(self, pid: str) -> bool:
-        r = self.round
-        assert r
-        return r.guess is not None if pid == r.spy else pid in r.votes
+        assert self.round
+        return pid in self.round.votes
 
     def _advance_if_ready(self) -> None:
         r = self.round
@@ -256,56 +227,46 @@ class Room:
         if self.phase == "vote":
             if active and all(self._is_locked(p) for p in active):
                 self._close_vote()
-        elif self.phase == "jury":
+        elif self.phase == "guess":
             jurors = [p for p in active if p != r.spy]
             if all(p in r.jury for p in jurors):
                 self._finalize()
 
     def _close_vote(self) -> None:
-        r = self.round
-        assert r
-        if r.guess is None:
-            r.guess = ""
-        if not r.guess or is_exact(r.guess, r.word):
-            self._finalize()
-            return
-        self.phase = "jury"
+        self.phase = "guess"
         self._advance_if_ready()
 
     def _finalize(self) -> None:
         r = self.round
         assert r
-        guess = r.guess or ""
         yes = sum(1 for v in r.jury.values() if v)
         no = len(r.jury) - yes
-        if not guess:
+        if yes + no == 0:
             outcome = "none"
-        elif is_exact(guess, r.word):
-            outcome = "exact"
-        elif yes >= no:  # lika går till den som gissade
+        elif yes >= no:  # minst hälften ja räcker, lika går till den som gissade
             outcome = "approved"
         else:
             outcome = "rejected"
         knowers = r.knowers
-        pointed = sum(1 for t in r.votes.values() if t == r.spy)
+        real_votes = {pid: t for pid, t in r.votes.items() if pid != r.spy}
+        pointed = sum(1 for t in real_votes.values() if t == r.spy)
         hid = pointed * 2 < len(knowers)
         gains: dict[str, int] = {}
-        for pid, target in r.votes.items():
+        for pid, target in real_votes.items():
             if target == r.spy:
                 gains[pid] = 1
-        spy_gain = (2 if outcome in ("exact", "approved") else 0) + (1 if hid else 0)
+        spy_gain = (2 if outcome == "approved" else 0) + (1 if hid else 0)
         if spy_gain:
             gains[r.spy] = spy_gain
         for pid, g in gains.items():
             if pid in self.players:
                 self.players[pid].score += g
         tally: dict[str, int] = {}
-        for target in r.votes.values():
+        for target in real_votes.values():
             tally[target] = tally.get(target, 0) + 1
         r.result = {
             "spyId": r.spy,
             "word": r.word,
-            "guess": guess,
             "outcome": outcome,
             "juryYes": yes,
             "juryNo": no,
@@ -352,6 +313,8 @@ class Room:
                 "juryVoted": len(r.jury),
                 "jurySize": len(r.knowers),
             }
+            if self.phase in ("guess", "reveal"):
+                view["spyId"] = r.spy  # rouletten har pekat ut hen
             if self.phase == "reveal":
                 view["result"] = r.result
         return view
@@ -371,18 +334,13 @@ class Room:
             )
             if not is_spy:
                 you["word"] = r.word
-            if self.phase == "jury":
-                view["jury"] = {"guess": r.guess} if is_spy else {"guess": r.guess, "word": r.word}
         view["you"] = you
         view["categories"] = [{"id": c["id"], "name": c["name"]} for c in CATEGORIES]
         return view
 
     def view_tv(self) -> dict:
-        """Vad TV:n visar. Inget hemligt före juryn och avslöjandet."""
+        """Vad TV:n visar. Ordet kommer först i avslöjandet, eftersom den ovetande tittar på skärmen."""
         view = self._common()
-        r = self.round
-        if r and self.phase == "jury":
-            view["jury"] = {"guess": r.guess, "word": r.word}
         view["tv"] = True
         return view
 

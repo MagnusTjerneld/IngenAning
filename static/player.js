@@ -197,20 +197,6 @@ function voteKnower(you) {
   </div>`];
 }
 
-function voteSpy() {
-  return ['vote' + S.round.n, `
-  <div class="screen __ENTER__">
-    ${catPill()}
-    <h1>Vad var ordet?</h1>
-    <p class="muted">De andra röstar nu, och det ser ut som att du också gör det.</p>
-    <div class="field"><label class="kicker" for="guess">Din gissning</label>
-      <input class="input" id="guess" maxlength="40" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="done"></div>
-    <button class="btn" data-act="guess">Lås min gissning</button>
-    <button class="btn ghost slim" data-act="noGuess">Jag har ingen aning</button>
-    <p class="muted small">Stavar du nästan rätt får de andra avgöra om det duger.</p>
-  </div>`];
-}
-
 function waiting(you, title, names, key) {
   const text = names.length ? `Väntar på ${names.map(esc).join(', ').replace(/, ([^,]*)$/, ' och $1')}.` : 'Strax klart.';
   return [key + S.round.n, `
@@ -224,20 +210,37 @@ function waiting(you, title, names, key) {
   </div>`];
 }
 
-function jury() {
-  return ['jury' + S.round.n, `
-  <div class="screen __ENTER__">
-    <div class="kicker">Juryn får avgöra</div>
-    <h1>Duger det här?</h1>
-    <div class="slip guess"><span>Gissningen</span><b>${esc(S.jury.guess)}</b></div>
-    <div class="slip truth"><span>Ordet var</span><b>${esc(S.jury.word)}</b></div>
-    <p class="muted small">Blir det lika vinner den som gissade.</p>
-    <div class="foot">
+function guessJury() {
+  const spy = byId(S, S.spyId);
+  return ['guess' + S.round.n, `
+  <div class="screen staged __ENTER__" style="--t0:${SUSPENSE_MS}ms">
+    ${suspense(S)}
+    <div class="field center" style="align-items:center">
+      <div class="kicker">Den som inte hade en aning</div>
+      <div class="stamp" style="${stampSize(spy.name, 'clamp(34px, 7.5dvh, 56px)', 125)}">${esc(spy.name)}</div>
+    </div>
+    <h1 class="d1" style="text-align:center">Gissade ${esc(spy.name)} rätt?</h1>
+    <p class="muted d1" style="text-align:center">${esc(spy.name)} säger sin gissning högt. Svara när du har hört den. Minst hälften ja räcker.</p>
+    <div class="foot d1">
       <div class="row2">
         <button class="btn ghost" data-act="juryNo">Nej</button>
-        <button class="btn" data-act="juryYes">Ja, det duger</button>
+        <button class="btn" data-act="juryYes">Ja, rätt</button>
       </div>
     </div>
+  </div>`];
+}
+
+function guessSpy() {
+  return ['guess' + S.round.n, `
+  <div class="screen center staged __ENTER__" style="--t0:${SUSPENSE_MS}ms">
+    ${suspense(S)}
+    <div class="field center" style="align-items:center">
+      <div class="kicker">Den som inte hade en aning</div>
+      <div class="stamp">Du</div>
+    </div>
+    <h1 class="d1">Säg din gissning högt</h1>
+    <div class="d1">${catPill()}</div>
+    <p class="muted d1">De andra avgör om det var rätt. Har du ingen aning, säg det.</p>
   </div>`];
 }
 
@@ -247,17 +250,16 @@ function reveal(you) {
   const host = byId(S, S.hostId);
   const votes = r.tally.map((t) => `${t.id === r.spyId ? '<b style="color:var(--yellow)">' : '<b style="color:var(--cream)">'}${esc(byId(S, t.id).name)} ${t.count}</b>`).join(', ');
   return ['reveal' + S.round.n, `
-  <div class="screen tight __ENTER__" style="--t0:${SUSPENSE_MS}ms">
-    ${suspense(S)}
-    <div class="field center" style="align-items:center">
-      <div class="kicker hold">Den som inte hade en aning</div>
-      <div class="stamp" style="font-size:min(clamp(34px, 7.5dvh, 56px), ${Math.round(1250 / Math.max(4, v.me ? 2 : v.spy.name.length)) / 10}vw)">${v.me ? 'Du' : esc(v.spy.name)}</div>
+  <div class="screen tight staged __ENTER__" style="--t0:1100ms">
+    <div class="field center now" style="align-items:center">
+      <div class="kicker">Juryn säger</div>
+      <div class="stamp ${v.good ? '' : 'no'}">${v.stamp}</div>
     </div>
     <p class="rword d1">${v.word}</p>
-    <p class="rguess d2">${v.guess} ${v.badge}</p>
+    <p class="rguess d2">${v.detail}</p>
     <p class="muted small d3" style="text-align:center">${v.pointed}${votes && S.players.length <= 8 ? ` Röster: ${votes}` : ''}</p>
     <div class="panel board d4 ${S.players.length > 4 ? 'two' : ''} ${S.players.length > 8 ? 'dense' : ''}"><div class="kicker">Ställning</div>${boardLines(S)}</div>
-    <div class="foot hold last">
+    <div class="foot last">
       ${hostGone(you)}
       ${you.isHost
         ? `<div class="footrow"><button class="btn" data-act="start">En runda till</button><button class="btn ghost" data-act="lobby" style="font-size:16px">Byt kategori</button></div>`
@@ -276,16 +278,14 @@ function screen() {
   const inRound = S.players.filter((p) => p.inRound);
   if (S.phase === 'clues') return L.cardDone ? clues(you) : card(you);
   if (S.phase === 'vote') {
-    if (you.locked) {
-      const slow = inRound.filter((p) => p.connected && !S.round.locked.includes(p.id)).map((p) => p.name);
-      return waiting(you, you.role === 'spy' ? 'Gissningen är låst' : 'Rösten är låst', slow, 'wait');
-    }
-    return you.role === 'spy' ? voteSpy() : voteKnower(you);
+    if (!you.locked) return voteKnower(you); // alla röstar, även den ovetande, så att ingen syns på vad de gör
+    const slow = inRound.filter((p) => p.connected && !S.round.locked.includes(p.id)).map((p) => p.name);
+    return waiting(you, 'Rösten är låst', slow, 'wait');
   }
-  if (S.phase === 'jury') {
-    if (you.role === 'spy') return waiting(you, 'Juryn överlägger', [], 'jurywait');
+  if (S.phase === 'guess') {
+    if (you.role === 'spy') return guessSpy();
     if (you.juryVoted) return waiting(you, 'Tack, juryn räknar', [`${S.round.jurySize - S.round.juryVoted} till`].filter(() => S.round.jurySize > S.round.juryVoted), 'jurywait');
-    return jury();
+    return guessJury();
   }
   return home();
 }
@@ -345,12 +345,6 @@ const actions = {
   peek() { L.peek = !L.peek; draw(); },
   pick(el) { L.pick = el.dataset.id; draw(); },
   vote() { if (L.pick) sock.send({ t: 'vote', target: L.pick }); },
-  guess() {
-    const text = document.getElementById('guess').value.trim();
-    if (!text) return say('Skriv en gissning, eller tryck på Jag har ingen aning.');
-    sock.send({ t: 'guess', text });
-  },
-  noGuess() { sock.send({ t: 'guess', text: '' }); },
   juryYes() { sock.send({ t: 'jury', ok: true }); },
   juryNo() { sock.send({ t: 'jury', ok: false }); },
   category(el) { sock.send({ t: 'category', id: el.dataset.id }); },
@@ -367,8 +361,7 @@ app.addEventListener('click', (e) => {
 });
 app.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
-  if (e.target.id === 'guess') actions.guess();
-  else if (e.target.id === 'code' || e.target.id === 'name') (L.mode === 'create' ? actions.create : actions.join)();
+  if (e.target.id === 'code' || e.target.id === 'name') (L.mode === 'create' ? actions.create : actions.join)();
 });
 
 snow(16);

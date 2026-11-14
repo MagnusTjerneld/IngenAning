@@ -3,7 +3,7 @@ import random
 import pytest
 from fastapi.testclient import TestClient
 
-from app.game import CATEGORIES, GameError, Room, is_exact, laps_for
+from app.game import CATEGORIES, GameError, Room, laps_for
 from app.main import app
 
 
@@ -11,16 +11,6 @@ def make_room(n=4, seed=1):
     room = Room("TEST", random.Random(seed))
     players = [room.add_player(f"P{i}") for i in range(n)]
     return room, [p.id for p in players]
-
-
-def test_exact_match_is_forgiving():
-    assert is_exact("Lussekatt", "lussekatt")
-    assert is_exact("  lussekatten ", "lussekatt")
-    assert is_exact("granen", "gran")
-    assert is_exact("janssons  frestelse", "Janssons frestelse")
-    assert not is_exact("saffransbulle", "lussekatt")
-    assert not is_exact("skinka", "julskinka")
-    assert not is_exact("", "ko")
 
 
 def test_laps():
@@ -43,13 +33,12 @@ def test_needs_three_players_and_host():
     assert room.phase == "clues"
 
 
-def test_spy_never_gets_word_before_reveal():
+def test_spy_and_tv_never_get_word_before_reveal():
     room, ids = make_room(5)
     room.start_round(ids[0])
     r = room.round
-    for phase_step in (None, "vote"):
-        if phase_step:
-            room.open_vote(ids[0])
+
+    def check():
         spy_view = room.view_for(r.spy)
         assert r.word not in str(spy_view)
         assert spy_view["you"]["role"] == "spy"
@@ -57,61 +46,86 @@ def test_spy_never_gets_word_before_reveal():
         for k in r.knowers:
             assert room.view_for(k)["you"]["word"] == r.word
 
+    check()
+    assert "spyId" not in room.view_tv()
+    room.open_vote(ids[0])
+    check()
+    assert "spyId" not in room.view_for(r.knowers[0])
+    for p in r.participants:
+        room.vote(p, next(x for x in r.participants if x != p))
+    assert room.phase == "guess"
+    check()  # den ovetande är utpekad men ordet är fortfarande hemligt för hen och TV:n
+    assert room.view_tv()["spyId"] == r.spy
 
-def play(room, ids, guess, spy_votes=None, jury=None):
+
+def play(room, spy_votes=None, jury=()):
+    """Spelar en runda. spy_votes = hur många som pekar ut den ovetande (None = alla)."""
     room.start_round(room.host_id)
     r = room.round
     room.open_vote(room.host_id)
     for i, k in enumerate(r.knowers):
         target = r.spy if spy_votes is None or i < spy_votes else next(x for x in r.knowers if x != k)
         room.vote(k, target)
-    room.guess(r.spy, guess)
-    if room.phase == "jury":
-        assert r.word not in str(room.view_for(r.spy))
-        for k, ok in zip(r.knowers, jury):
-            room.jury_vote(k, ok)
+    assert room.phase == "vote"  # väntar på den ovetandes bluffröst
+    room.vote(r.spy, r.knowers[0])
+    assert room.phase == "guess"
+    for k, ok in zip(r.knowers, jury):
+        room.jury_vote(k, ok)
+    if room.phase == "guess":
+        room.force_close(room.host_id)
     assert room.phase == "reveal"
     return r
 
 
-def test_exact_guess_skips_jury_and_scores():
+def test_majority_yes_scores_and_bluff_vote_is_ignored():
     room, ids = make_room(5)
-    room.start_round(ids[0])
-    word = room.round.word
-    room.phase, room.round = "lobby", None
-    room.used_words.clear()
-    room.rng = random.Random(1)
-    room.round_count = 0
-    r = play(room, ids, word.upper())
-    assert r.word == word
+    r = play(room, jury=[True, True, True, False])
     res = r.result
-    assert res["outcome"] == "exact" and res["juryYes"] == res["juryNo"] == 0
-    assert room.players[r.spy].score == 2  # rätt ord, men alla pekade ut hen
+    assert res["outcome"] == "approved" and (res["juryYes"], res["juryNo"]) == (3, 1)
+    assert res["pointed"] == 4 and res["hid"] is False
+    assert sum(t["count"] for t in res["tally"]) == 4  # bluffrösten räknas inte
+    assert room.players[r.spy].score == 2
     assert all(room.players[k].score == 1 for k in r.knowers)
 
 
 def test_jury_tie_goes_to_guesser():
     room, ids = make_room(5)
-    r = play(room, ids, "nästan rätt", jury=[True, True, False, False])
+    r = play(room, jury=[True, True, False, False])
     assert r.result["outcome"] == "approved"
     assert room.players[r.spy].score == 2
 
 
 def test_jury_rejects_and_hidden_bonus():
     room, ids = make_room(5)
-    r = play(room, ids, "helt fel", spy_votes=1, jury=[False, False, False, True])
+    r = play(room, spy_votes=1, jury=[False, False, False, True])
     assert r.result["outcome"] == "rejected"
     assert r.result["hid"] is True  # 1 av 4 pekade ut hen
     assert room.players[r.spy].score == 1
     assert sum(room.players[k].score for k in r.knowers) == 1
 
 
-def test_half_pointing_is_not_hidden():
+def test_half_pointing_is_not_hidden_and_no_jury_means_no_points():
     room, ids = make_room(5)
-    r = play(room, ids, "", spy_votes=2)
+    r = play(room, spy_votes=2)
     assert r.result["outcome"] == "none"
     assert r.result["hid"] is False
     assert room.players[r.spy].score == 0
+
+
+def test_only_jurors_decide():
+    room, ids = make_room(4)
+    room.start_round(ids[0])
+    r = room.round
+    room.open_vote(ids[0])
+    with pytest.raises(GameError):
+        room.jury_vote(r.knowers[0], True)  # för tidigt
+    for p in r.participants:
+        room.vote(p, next(x for x in r.participants if x != p))
+    with pytest.raises(GameError):
+        room.jury_vote(r.spy, True)  # den ovetande dömer inte sig själv
+    room.jury_vote(r.knowers[0], True)
+    with pytest.raises(GameError):
+        room.jury_vote(r.knowers[0], True)
 
 
 def test_disconnect_does_not_block_and_force_works():
@@ -119,17 +133,23 @@ def test_disconnect_does_not_block_and_force_works():
     room.start_round(ids[0])
     r = room.round
     room.open_vote(ids[0])
-    slow = next(k for k in r.knowers if k != ids[0])
-    for k in r.knowers:
-        if k != slow:
-            room.vote(k, r.spy)
-    room.guess(r.spy, "")
+    slow = next(p for p in r.participants if p != ids[0])
+    for p in r.participants:
+        if p != slow:
+            room.vote(p, next(x for x in r.participants if x != p))
     assert room.phase == "vote"
     room.set_connected(slow, False)
-    assert room.phase == "reveal"
+    assert room.phase == "guess"
+    for k in r.knowers:
+        if k != slow:
+            room.jury_vote(k, True)
+    assert room.phase == "reveal"  # den frånkopplade jurymedlemmen blockerar inte
 
+    room.set_connected(slow, True)
     room.start_round(ids[0])
     room.open_vote(ids[0])
+    room.force_close(ids[0])
+    assert room.phase == "guess"
     room.force_close(ids[0])
     assert room.phase == "reveal"
 
@@ -142,6 +162,7 @@ def test_words_do_not_repeat_until_exhausted():
         room.start_round(ids[0])
         seen.append(room.round.word)
         room.open_vote(ids[0])
+        room.force_close(ids[0])
         room.force_close(ids[0])
     assert len(set(seen)) == 16
 
@@ -185,17 +206,15 @@ def test_full_round_over_websocket():
             host.send_json({"t": "openVote"})
             for pid, s in socks.items():
                 drain(s, "vote")
-                if pid == spy:
-                    s.send_json({"t": "guess", "text": "något annat"})
-                else:
-                    s.send_json({"t": "vote", "target": spy})
+                s.send_json({"t": "vote", "target": spy if pid != spy else host_id if spy != host_id else next(p for p in socks if p != spy)})
             for pid, s in socks.items():
-                st = drain(s, "jury")
+                st = drain(s, "guess")
+                assert st["spyId"] == spy
                 if pid != spy:
-                    assert st["jury"]["word"] == word
                     s.send_json({"t": "jury", "ok": False})
                 else:
-                    assert "word" not in st["jury"]
+                    assert word not in str(st)
+            assert word not in str(drain(tv, "guess"))
             final = drain(host, "reveal")
             assert final["result"]["outcome"] == "rejected"
             assert final["result"]["spyId"] == spy

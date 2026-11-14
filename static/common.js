@@ -123,7 +123,7 @@ const SUSPENSE = ['Den som inte hade en aning var', 'Nu spricker bluffen', 'Någ
 // Rouletten före avslöjandet: strålkastaren hoppar mellan spelarna, saktar in och stannar på den ovetande.
 function suspense(state) {
   const people = state.players.filter((p) => p.inRound);
-  return `<div class="suspense" data-spy="${esc(state.result.spyId)}" aria-hidden="true">
+  return `<div class="suspense" data-spy="${esc(state.spyId)}" aria-hidden="true">
     <div class="kicker">${SUSPENSE[(state.round.n - 1) % SUSPENSE.length]}</div>
     <div class="ring">${people.map((p) => `<span class="who" data-id="${esc(p.id)}">${dot(p)}<span class="nm">${esc(p.name)}</span></span>`).join('')}</div>
     <div class="dots"><span></span><span></span><span></span></div>
@@ -150,23 +150,23 @@ function runSuspense(root) {
   setTimeout(() => box.classList.add('gone'), SUSPENSE_MS - 150);
 }
 
+const stampSize = (name, cap, perChar) => `font-size:min(${cap}, ${Math.round((perChar * 10) / Math.max(4, name.length)) / 10}vw)`;
+
 function verdict(state, youId) {
   const r = state.result;
   const spy = byId(state, r.spyId);
   const me = r.spyId === youId;
   const who = me ? 'Du' : esc(spy.name);
+  const good = r.outcome === 'approved';
+  const stamp = good ? 'Rätt!' : r.outcome === 'rejected' ? 'Fel!' : 'Ingen dom';
+  let detail;
+  if (r.outcome === 'none') detail = 'Ingen i juryn röstade, så gissningen gav inga poäng.';
+  else if (r.outcome === 'rejected') detail = `${who} gissade fel. Juryn sa nej med ${r.juryNo} mot ${r.juryYes}.`;
+  else if (r.juryYes === r.juryNo) detail = `Lika i juryn, ${r.juryYes} mot ${r.juryNo}, och då går det till ${me ? 'dig' : who}.`;
+  else detail = `${who} listade ut ordet. Juryn sa ja med ${r.juryYes} mot ${r.juryNo}.`;
   const word = `Ordet var <b class="word">${esc(r.word)}</b>`;
-  let guess; let badge; let good = true;
-  if (r.outcome === 'none') { guess = `${who} hade ingen aning`; badge = 'Ingen gissning'; good = false; }
-  else {
-    guess = `${who} skrev <b>${esc(r.guess)}</b>`;
-    if (r.outcome === 'exact') badge = 'Mitt i prick';
-    else if (r.outcome === 'rejected') { badge = `Juryn sa nej, ${r.juryNo} mot ${r.juryYes}`; good = false; }
-    else if (r.juryYes === r.juryNo) badge = `Lika i juryn, ${r.juryYes} mot ${r.juryNo}: godkänt`;
-    else badge = `Juryn sa ja, ${r.juryYes} mot ${r.juryNo}`;
-  }
   const pointed = `${r.pointed === 0 ? 'Ingen' : `${r.pointed} av ${r.knowers}`} pekade ut ${me ? 'dig' : esc(spy.name)}${r.hid ? ', bonuspoäng för att smälta in.' : '.'}`;
-  return { word, guess, badge: `<span class="outcome ${good ? '' : 'no'}">${badge}</span>`, pointed, spy, me };
+  return { stamp, good, word, detail, pointed, spy, me };
 }
 
 function boardLines(state) {

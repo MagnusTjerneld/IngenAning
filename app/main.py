@@ -96,8 +96,6 @@ def _act(room: Room, pid: str, msg: dict) -> None:
         room.open_vote(pid)
     elif t == "vote":
         room.vote(pid, str(msg.get("target", "")))
-    elif t == "guess":
-        room.guess(pid, str(msg.get("text", "")))
     elif t == "jury":
         room.jury_vote(pid, bool(msg.get("ok")))
     elif t == "force":

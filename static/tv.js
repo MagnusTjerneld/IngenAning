@@ -92,31 +92,30 @@ function vote() {
   </div>`];
 }
 
-function jury() {
+function guess() {
   const r = S.round;
-  return ['jury' + r.n, `
-  <div class="stage __ENTER__" style="justify-content:center">
-    <div class="kicker">Juryn får avgöra</div>
-    <h1>Duger det här?</h1>
-    <div class="split" style="align-items:stretch">
-      <div class="slip guess" style="flex:1"><span>Gissningen</span><b>${esc(S.jury.guess)}</b></div>
-      <div class="slip truth" style="flex:1"><span>Ordet var</span><b>${esc(S.jury.word)}</b></div>
-    </div>
-    <p class="lead">${r.juryVoted} av ${r.jurySize} har röstat. Blir det lika vinner den som gissade.</p>
+  const spy = byId(S, S.spyId);
+  return ['guess' + r.n, `
+  <div class="stage __ENTER__" style="justify-content:center;align-items:center;text-align:center;--t0:${SUSPENSE_MS}ms">
+    ${suspense(S)}
+    <div class="kicker hold">Den som inte hade en aning</div>
+    <div class="stamp" style="${stampSize(spy.name, '11vw', 110)}">${esc(spy.name)}</div>
+    <h1 class="d1">${esc(spy.name)}, vad var ordet?</h1>
+    <p class="lead d2">Säg det högt. De andra avgör i mobilen om det var rätt.</p>
+    <p class="lead d2">${r.juryVoted} av ${r.jurySize} har röstat.</p>
   </div>`];
 }
 
 function reveal() {
   const v = verdict(S, null);
   return ['reveal' + S.round.n, `
-  <div class="stage __ENTER__" style="justify-content:center;--t0:${SUSPENSE_MS}ms">
-    ${suspense(S)}
+  <div class="stage __ENTER__" style="justify-content:center;--t0:1100ms">
     <div class="split">
       <div class="col">
-        <div class="kicker hold">Den som inte hade en aning</div>
-        <div class="stamp" style="font-size:min(11vw, ${Math.round(700 / Math.max(4, v.spy.name.length)) / 10}vw)">${esc(v.spy.name)}</div>
+        <div class="kicker">Juryn säger</div>
+        <div class="stamp ${v.good ? '' : 'no'}">${v.stamp}</div>
         <p class="lead rword d1" style="color:var(--cream);margin-top:2vh">${v.word}</p>
-        <p class="lead rguess d2" style="color:var(--cream)">${v.guess} ${v.badge}</p>
+        <p class="lead rguess d2" style="color:var(--cream)">${v.detail}</p>
         <p class="lead d3">${v.pointed}</p>
       </div>
       <div class="boardbox d4"><div class="kicker">Ställning</div>${boardLines(S)}</div>
@@ -127,7 +126,7 @@ function reveal() {
 function draw() {
   if (!code || !S) { const [k, h] = code ? ['connecting', `<div class="stage __ENTER__" style="align-items:center;justify-content:center"><div class="dots" aria-hidden="true"><span></span><span></span><span></span></div></div>`] : form(); return render(k, h); }
   if (S.round && S.round.n !== seen.round) { seen.round = S.round.n; seen.locked.clear(); }
-  const view = { lobby, clues, vote, jury, reveal }[S.phase] || lobby;
+  const view = { lobby, clues, vote, guess, reveal }[S.phase] || lobby;
   const [key, html] = view();
   render(key, html);
   runSuspense(app);
