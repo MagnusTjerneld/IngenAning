@@ -13,8 +13,8 @@ let S = null;                  // senaste läget från servern
 let online = true;
 let toast = '';
 let toastTimer = null;
-const L = { round: 0, flipped: false, cardDone: false, peek: false, pick: null, chips: new Set() };
 const urlCode = (new URLSearchParams(location.search).get('kod') || '').toUpperCase().slice(0, 4);
+const L = { round: 0, flipped: false, cardDone: false, closing: false, peek: false, pick: null, chips: new Set(), mode: urlCode ? 'join' : null };
 
 const sock = makeSocket({
   hello: () => pending || (session && { t: 'join', code: session.code, pid: session.pid, name: session.name }),
@@ -53,17 +53,30 @@ function leave() {
 function home() {
   let last = ''; try { last = localStorage.getItem(KEY + '-namn') || ''; } catch (_) { /* privat läge */ }
   const name = esc((session && session.name) || last);
-  return ['home', `
-  <div class="screen __ENTER__">
-    <div class="grow"></div>
-    <div class="logo">Ingen<br><em>aning</em></div>
-    <p class="muted">Alla utom en kan ordet. Ett ord var, sedan röstar ni.</p>
-    <div class="field"><label class="kicker" for="name">Ditt namn</label>
-      <input class="input" id="name" maxlength="16" autocomplete="given-name" value="${name}"></div>
-    <div class="field"><label class="kicker" for="code">Rumskod</label>
+  const nameField = `<div class="field"><label class="kicker" for="name">Ditt namn</label>
+      <input class="input" id="name" maxlength="16" autocomplete="given-name" value="${name}"></div>`;
+  let body;
+  if (L.mode === 'join') {
+    body = `<h1>Gå med i ett rum</h1>${nameField}
+    <div class="field"><label class="kicker" for="code">Rumskod, fyra bokstäver</label>
       <input class="input code" id="code" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" value="${esc(urlCode)}"></div>
     <button class="btn" data-act="join">Gå med</button>
-    <button class="btn ghost slim" data-act="create">Starta ett nytt rum</button>
+    <button class="btn ghost slim" data-act="modeNone">Tillbaka</button>`;
+  } else if (L.mode === 'create') {
+    body = `<h1>Starta ett nytt rum</h1>${nameField}
+    <p class="muted small">Du blir värd och får en rumskod som de andra går in med.</p>
+    <button class="btn" data-act="create">Starta rummet</button>
+    <button class="btn ghost slim" data-act="modeNone">Tillbaka</button>`;
+  } else {
+    body = `<div class="logo">Ingen<br><em>aning</em></div>
+    <p class="muted">Alla utom en kan ordet. Ett ord var, sedan röstar ni.</p>
+    <button class="btn" data-act="modeJoin">Gå med i ett rum</button>
+    <button class="btn ghost" data-act="modeCreate">Starta ett nytt rum</button>`;
+  }
+  return ['home-' + (L.mode || 'start'), `
+  <div class="screen __ENTER__">
+    <div class="grow"></div>
+    ${body}
     <div class="grow"></div>
   </div>`];
 }
@@ -136,7 +149,7 @@ function card(you) {
       </button>
     </div>
     <div class="grow"></div>
-    <div class="after"><button class="btn" data-act="cardDone">Jag har sett, göm lappen</button></div>
+    <div class="after"><p class="muted small" style="margin-bottom:10px">Tryck på lappen igen eller på knappen när du har läst.</p><button class="btn" data-act="cardDone">Jag har sett, göm lappen</button></div>
   </div>`];
 }
 
@@ -245,7 +258,7 @@ function reveal(you) {
 function screen() {
   if (!session || !S) return session ? ['connecting', `<div class="screen center middle __ENTER__"><div class="dots" aria-hidden="true"><span></span><span></span><span></span></div><p class="muted">Ansluter</p></div>`] : home();
   const you = S.you;
-  if (S.round && S.round.n !== L.round) Object.assign(L, { round: S.round.n, flipped: false, cardDone: false, peek: false, pick: null });
+  if (S.round && S.round.n !== L.round) Object.assign(L, { round: S.round.n, flipped: false, cardDone: false, closing: false, peek: false, pick: null });
   if (S.phase === 'lobby') return lobby(you);
   if (S.phase === 'reveal') return reveal(you);
   if (!you.inRound) return spectator();
@@ -296,10 +309,26 @@ const actions = {
   },
   leave,
   flip() {
-    L.flipped = !L.flipped;
-    document.getElementById('hang').classList.toggle('flipped', L.flipped); // utan omritning, så att vändningen animeras
+    if (L.flipped) return actions.cardDone(); // att trycka på den öppna lappen betyder "jag har sett"
+    L.flipped = true;
+    document.getElementById('hang').classList.add('flipped'); // utan omritning, så att vändningen animeras
   },
-  cardDone() { L.cardDone = true; sock.send({ t: 'seen' }); draw(); },
+  cardDone() {
+    if (L.closing) return;
+    L.closing = true;
+    const hang = document.getElementById('hang');
+    if (hang) hang.classList.remove('flipped', 'open');
+    const n = L.round;
+    setTimeout(() => {
+      if (L.round !== n) return;
+      L.closing = false; L.flipped = false; L.cardDone = true;
+      sock.send({ t: 'seen' });
+      draw();
+    }, 480);
+  },
+  modeJoin() { L.mode = 'join'; draw(); const el = document.getElementById(document.getElementById('name').value ? 'code' : 'name'); if (el) el.focus(); },
+  modeCreate() { L.mode = 'create'; draw(); const el = document.getElementById('name'); if (el) el.focus(); },
+  modeNone() { L.mode = null; draw(); },
   peek() { L.peek = !L.peek; draw(); },
   pick(el) { L.pick = el.dataset.id; draw(); },
   vote() { if (L.pick) sock.send({ t: 'vote', target: L.pick }); },
@@ -321,9 +350,9 @@ app.addEventListener('click', (e) => {
 app.addEventListener('keydown', (e) => {
   if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return;
   if (e.target.id === 'guess') actions.guess();
-  else if (e.target.id === 'code' || e.target.id === 'name') actions.join();
+  else if (e.target.id === 'code' || e.target.id === 'name') (L.mode === 'create' ? actions.create : actions.join)();
 });
 
-snow(10);
+snow(16);
 if (session) sock.start();
 draw();

@@ -139,6 +139,6 @@ function go() {
 app.addEventListener('click', (e) => { if (e.target.closest('[data-act="go"]')) go(); });
 app.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'code') go(); });
 
-snow(14);
+snow(22);
 if (code) sock.start();
 draw();

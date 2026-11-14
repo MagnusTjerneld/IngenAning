@@ -9,10 +9,14 @@ const lapsText = (n) => (n === 1 ? 'Ni kör ett varv.' : 'Ni kör två varv.');
 
 function snow(count) {
   const el = document.getElementById('snow');
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
   let html = '';
   for (let i = 0; i < count; i++) {
-    const size = 4 + (i * 7) % 5;
-    html += `<span style="left:${(i * 37 + 9) % 100}%;width:${size}px;height:${size}px;opacity:${0.2 + ((i * 3) % 4) * 0.05};animation-duration:${11 + (i * 5) % 8}s;animation-delay:-${(i * 3.7) % 14}s"></span>`;
+    const depth = rnd();                        // 0 = långt bort, 1 = nära
+    const size = 3 + depth * 6;
+    const dur = 26 - depth * 18 + rnd() * 5;    // ungefär 8 till 31 sekunder
+    html += `<span style="left:${(rnd() * 100).toFixed(1)}%;width:${size.toFixed(1)}px;height:${size.toFixed(1)}px;opacity:${(0.14 + depth * 0.26).toFixed(2)};animation-duration:${dur.toFixed(1)}s;animation-delay:-${(rnd() * dur).toFixed(1)}s"></span>`;
   }
   el.innerHTML = html;
 }
