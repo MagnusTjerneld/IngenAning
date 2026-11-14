@@ -202,3 +202,37 @@ def test_full_round_over_websocket():
             scores = {p["id"]: p["score"] for p in final["players"]}
             assert scores[spy] == 0 and sum(scores.values()) == 2
             assert drain(tv, "reveal")["result"]["word"] == word
+
+
+def test_rejoin_by_name_takes_the_same_seat_mid_round():
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as host:
+        host.send_json({"t": "create", "name": "Värd"})
+        code = host.receive_json()["code"]
+        with client.websocket_connect("/ws") as a:
+            a.send_json({"t": "join", "code": code, "name": "Elsa"})
+            a.receive_json()
+            with client.websocket_connect("/ws") as b:
+                b.send_json({"t": "join", "code": code, "name": "Nils"})
+                nils = b.receive_json()["pid"]
+                # samma namn medan Nils är ansluten: avvisas
+                with client.websocket_connect("/ws") as dup:
+                    dup.send_json({"t": "join", "code": code, "name": " nils "})
+                    err = dup.receive_json()
+                    assert err["t"] == "error" and err["fatal"]
+                host.send_json({"t": "start"})
+            # Nils tappar anslutningen mitt i rundan och kommer tillbaka från en annan webbläsare, utan sitt id
+            with client.websocket_connect("/ws") as b2:
+                b2.send_json({"t": "join", "code": code, "name": "nils"})
+                again = b2.receive_json()
+                assert again["t"] == "joined" and again["pid"] == nils
+                state = b2.receive_json()["state"]
+                assert state["phase"] == "clues" and state["you"]["inRound"] is True
+                assert len(state["players"]) == 3
+
+
+def test_ping_gets_pong():
+    client = TestClient(app)
+    with client.websocket_connect("/ws") as s:
+        s.send_json({"t": "ping"})
+        assert s.receive_json() == {"t": "pong"}

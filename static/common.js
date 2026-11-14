@@ -57,11 +57,15 @@ function makeRenderer(root) {
 }
 
 // WebSocket som återansluter av sig själv. hello() ger första meddelandet vid varje anslutning.
+// En mobil som somnat kan ha en anslutning som ser öppen ut men är död. Därför pingas servern,
+// och tystnar den, eller kommer sidan tillbaka efter att ha varit dold, kopplas det om direkt.
 function makeSocket({ hello, onMessage, onStatus }) {
   let ws = null;
   let tries = 0;
   let timer = null;
   let wanted = false;
+  let lastHeard = 0;
+  let hiddenAt = 0;
   const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   function open() {
     clearTimeout(timer);
@@ -70,21 +74,47 @@ function makeSocket({ hello, onMessage, onStatus }) {
     if (!first) return;
     ws = new WebSocket(url);
     const mine = ws;
-    mine.onopen = () => { tries = 0; mine.send(JSON.stringify(first)); onStatus(true); };
-    mine.onmessage = (e) => { try { onMessage(JSON.parse(e.data)); } catch (_) { /* ogiltigt meddelande */ } };
+    lastHeard = Date.now();
+    mine.onopen = () => { tries = 0; lastHeard = Date.now(); mine.send(JSON.stringify(first)); onStatus(true); };
+    mine.onmessage = (e) => {
+      if (ws !== mine) return;
+      lastHeard = Date.now();
+      let m; try { m = JSON.parse(e.data); } catch (_) { return; }
+      if (m.t !== 'pong') onMessage(m);
+    };
     mine.onclose = () => {
       if (ws !== mine) return;
+      ws = null;
       onStatus(false);
-      if (wanted) timer = setTimeout(open, Math.min(5000, 400 * 2 ** tries++));
+      if (wanted) timer = setTimeout(open, Math.min(4000, 300 * 2 ** tries++));
     };
   }
-  setInterval(() => { if (ws && ws.readyState === 1) ws.send('{"t":"ping"}'); }, 25000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && wanted) open(); });
-  window.addEventListener('online', () => { if (wanted) open(); });
+  function redial() {
+    if (!wanted) return;
+    const old = ws;
+    ws = null;
+    if (old) { try { old.close(); } catch (_) { /* redan stängd */ } }
+    tries = 0;
+    open();
+  }
+  setInterval(() => {
+    if (!wanted) return;
+    if (ws && ws.readyState === 1) {
+      if (Date.now() - lastHeard > 16000) redial();
+      else ws.send('{"t":"ping"}');
+    } else if (!ws) open();
+  }, 6000);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenAt = Date.now(); return; }
+    if (!wanted) return;
+    if (!ws || ws.readyState !== 1 || Date.now() - hiddenAt > 3000) redial();
+  });
+  window.addEventListener('pageshow', (e) => { if (e.persisted) redial(); });
+  window.addEventListener('online', redial);
   return {
     start() { wanted = true; open(); },
-    stop() { wanted = false; clearTimeout(timer); if (ws) { const w = ws; ws = null; w.close(); } },
-    send(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); },
+    stop() { wanted = false; clearTimeout(timer); if (ws) { const w = ws; ws = null; try { w.close(); } catch (_) { /* redan stängd */ } } },
+    send(msg) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg)); else redial(); },
   };
 }
 

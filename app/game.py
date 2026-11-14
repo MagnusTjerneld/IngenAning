@@ -109,6 +109,10 @@ class Room:
             self.host_id = player.id
         return player
 
+    def find_by_name(self, name: str) -> Player | None:
+        key = re.sub(r"\s+", " ", name).strip()[:MAX_NAME].casefold()
+        return next((p for p in self.players.values() if p.name.casefold() == key), None) if key else None
+
     def set_connected(self, pid: str, connected: bool) -> None:
         player = self.players.get(pid)
         if not player:

@@ -1,7 +1,10 @@
 """Ingen aning: server. En process, allt speltillstånd i minnet."""
 from __future__ import annotations
 
+import asyncio
 import time
+from contextlib import asynccontextmanager, suppress
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -12,13 +15,45 @@ from .game import GameError, Room, new_code
 
 STATIC = Path(__file__).parent.parent / "static"
 ROOM_TTL = 6 * 3600
+STALE_AFTER = 20.0   # sekunder utan livstecken innan en anslutning räknas som död
+REAP_EVERY = 5.0
 
-app = FastAPI(title="Ingen aning", docs_url=None, redoc_url=None, openapi_url=None)
-app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+@dataclass(eq=False)
+class Conn:
+    ws: WebSocket
+    pid: str | None          # None för TV
+    last: float = field(default_factory=time.monotonic)
+
+    @property
+    def alive(self) -> bool:
+        return time.monotonic() - self.last < STALE_AFTER
+
 
 rooms: dict[str, Room] = {}
-# kod -> lista av (websocket, spelar-id eller None för TV)
-conns: dict[str, list[tuple[WebSocket, str | None]]] = {}
+conns: dict[str, list[Conn]] = {}
+
+
+async def _reaper() -> None:
+    """Stänger anslutningar som tystnat, t.ex. en mobil som somnat utan att säga hej då."""
+    while True:
+        await asyncio.sleep(REAP_EVERY)
+        for lst in list(conns.values()):
+            for c in list(lst):
+                if not c.alive:
+                    with suppress(Exception):
+                        await c.ws.close()
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    task = asyncio.create_task(_reaper())
+    yield
+    task.cancel()
+
+
+app = FastAPI(title="Ingen aning", docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
 
 @app.get("/")
@@ -45,12 +80,10 @@ def _sweep() -> None:
 
 async def _broadcast(room: Room) -> None:
     room.last_active = time.time()
-    for ws, pid in list(conns.get(room.code, [])):
-        view = room.view_tv() if pid is None else room.view_for(pid)
-        try:
-            await ws.send_json({"t": "state", "state": view})
-        except Exception:
-            pass  # stängs och städas av sin egen mottagarloop
+    for c in list(conns.get(room.code, [])):
+        view = room.view_tv() if c.pid is None else room.view_for(c.pid)
+        with suppress(Exception):  # en trasig anslutning städas av sin egen mottagarloop
+            await c.ws.send_json({"t": "state", "state": view})
 
 
 def _act(room: Room, pid: str, msg: dict) -> None:
@@ -81,58 +114,71 @@ def _act(room: Room, pid: str, msg: dict) -> None:
         raise GameError("Okänt kommando.")
 
 
+async def _join(room: Room, msg: dict) -> str:
+    """Hittar spelarens plats i rummet. Samma person ska alltid hamna på samma plats igen."""
+    old = str(msg.get("pid", ""))
+    if old and old in room.players:
+        return old
+    name = str(msg.get("name", ""))
+    same = room.find_by_name(name)
+    if not same:
+        return room.add_player(name).id
+    mine = [c for c in conns.get(room.code, []) if c.pid == same.id]
+    if any(c.alive for c in mine):
+        raise GameError(f"Det finns redan en {same.name} i rummet. Välj ett annat namn.")
+    # Samma namn och ingen levande anslutning: det är samma person som kommer tillbaka,
+    # till exempel från en annan webbläsare. Hen tar över sin plats, mitt i rundan om det behövs.
+    for c in mine:
+        with suppress(Exception):
+            await c.ws.close()
+    return same.id
+
+
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
     room: Room | None = None
-    pid: str | None = None
-    entry: tuple[WebSocket, str | None] | None = None
+    conn: Conn | None = None
     try:
         while True:
             msg = await ws.receive_json()
             if not isinstance(msg, dict):
                 continue
+            if conn:
+                conn.last = time.monotonic()
             t = msg.get("t")
             if t == "ping":
+                await ws.send_json({"t": "pong"})
                 continue
             try:
-                if entry is None:
+                if conn is None:
                     code = str(msg.get("code", "")).upper().strip()
                     if t == "create":
                         _sweep()
                         room = Room(new_code(rooms))
                         rooms[room.code] = room
                         pid = room.add_player(str(msg.get("name", ""))).id
-                    elif t == "join":
+                    elif t in ("join", "tv"):
                         room = rooms.get(code)
                         if not room:
                             raise GameError("Hittar inget rum med den koden.")
-                        old = str(msg.get("pid", ""))
-                        if old and old in room.players:
-                            pid = old
-                        else:
-                            pid = room.add_player(str(msg.get("name", ""))).id
-                    elif t == "tv":
-                        room = rooms.get(code)
-                        if not room:
-                            raise GameError("Hittar inget rum med den koden.")
-                        pid = None
+                        pid = await _join(room, msg) if t == "join" else None
                     else:
                         raise GameError("Gå med i ett rum först.")
-                    entry = (ws, pid)
-                    conns.setdefault(room.code, []).append(entry)
+                    conn = Conn(ws, pid)
+                    conns.setdefault(room.code, []).append(conn)
                     if pid:
                         room.set_connected(pid, True)
                     await ws.send_json({"t": "joined", "code": room.code, "pid": pid})
-                elif pid is None:
+                elif conn.pid is None:
                     continue  # TV:n bara tittar
                 else:
                     assert room
-                    if pid not in room.players:
+                    if conn.pid not in room.players:
                         raise GameError("Du är inte längre med i rummet.")
-                    _act(room, pid, msg)
+                    _act(room, conn.pid, msg)
             except GameError as err:
-                await ws.send_json({"t": "error", "msg": str(err), "fatal": entry is None})
+                await ws.send_json({"t": "error", "msg": str(err), "fatal": conn is None})
                 continue
             assert room
             await _broadcast(room)
@@ -141,10 +187,10 @@ async def ws_endpoint(ws: WebSocket) -> None:
     except Exception:
         pass
     finally:
-        if room and entry:
+        if room and conn:
             lst = conns.get(room.code, [])
-            if entry in lst:
-                lst.remove(entry)
-            if pid and not any(p == pid for _, p in lst):
-                room.set_connected(pid, False)
+            if conn in lst:
+                lst.remove(conn)
+            if conn.pid and not any(c.pid == conn.pid for c in lst):
+                room.set_connected(conn.pid, False)
                 await _broadcast(room)
